@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Maps Leads Scraper · T3H4</title>
+<style>
+  :root { --bg:#050505; --panel:#0d0d0d; --line:#1f1f1f; --txt:#d4d4d4; --muted:#777; --acc:#E5FF00; }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:'Inter',system-ui,Arial,sans-serif; line-height:1.5;
+  }
+  .wrap { max-width:1080px; margin:0 auto; padding:32px 20px 80px; }
+  header { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .logo { background:var(--acc); color:#050505; font-weight:900; padding:4px 10px; border-radius:8px; font-size:14px; letter-spacing:1px; }
+  h1 { font-size:28px; margin:14px 0 4px; }
+  .sub { color:var(--muted); margin:0 0 28px; font-size:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:22px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  input[type=text], input[type=number] {
+    width:100%; background:#070707; border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:13px 14px; font-size:15px; outline:none;
+  }
+  input:focus { border-color:var(--acc); }
+  .row { display:flex; gap:16px; flex-wrap:wrap; margin-top:16px; align-items:flex-end; }
+  .row > div { flex:1; min-width:150px; }
+  .check { display:flex; align-items:center; gap:8px; color:var(--txt); font-size:14px; }
+  .check input { width:18px; height:18px; accent-color:var(--acc); }
+  button {
+    background:var(--acc); color:#050505; border:none; font-weight:700; font-size:15px;
+    padding:13px 26px; border-radius:10px; cursor:pointer; transition:.15s;
+  }
+  button:hover { filter:brightness(1.08); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .ghost { background:transparent; color:var(--acc); border:1px solid var(--acc); }
+  .status { font-size:14px; color:var(--acc); min-height:22px; margin-top:14px; font-family:'JetBrains Mono',monospace; }
+  .bar { height:6px; background:#1a1a1a; border-radius:99px; overflow:hidden; margin-top:10px; display:none; }
+  .bar > i { display:block; height:100%; width:0; background:var(--acc); transition:width .3s; }
+  .actions { display:flex; gap:12px; margin:18px 0 6px; flex-wrap:wrap; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--acc); font-weight:600; position:sticky; top:0; background:var(--panel); }
+  td a { color:#9fd; word-break:break-all; }
+  .tablewrap { max-height:560px; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+  .empty { color:var(--muted); font-size:14px; }
+  .pill { display:inline-block; background:#1a1a1a; color:var(--acc); border-radius:99px; padding:3px 12px; font-size:13px; }
+  code { background:#1a1a1a; padding:2px 6px; border-radius:6px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><span class="logo">T3H4</span> <span class="pill">Google Maps Leads</span></header>
+  <h1>Scraper de Leads do Google Maps</h1>
+  <p class="sub">Cole um link de pesquisa do Google Maps (ou digite um termo, ex: <code>dentistas em São Carlos</code>) e baixe a planilha com todos os estabelecimentos.</p>
+
+  <div class="card">
+    <label for="input">Link do Google Maps ou termo de busca</label>
+    <input id="input" type="text" placeholder="https://www.google.com/maps/search/restaurantes+em+sao+carlos  —  ou  —  restaurantes em São Carlos" />
+    <div class="row">
+      <div>
+        <label for="max">Máx. de resultados (0 = todos)</label>
+        <input id="max" type="number" min="0" value="0" />
+      </div>
+      <div style="flex:0 0 auto;">
+        <label>Coleta detalhada</label>
+        <span class="check"><input id="deep" type="checkbox" checked /> Abrir cada local (telefone, site, endereço)</span>
+      </div>
+      <div style="flex:0 0 auto;">
+        <button id="go">Buscar leads</button>
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="bar" id="bar"><i id="barfill"></i></div>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <strong id="count">0 leads</strong>
+      <div class="actions" style="margin:0;">
+        <button class="ghost" id="csv">⬇ CSV</button>
+        <button class="ghost" id="xlsx">⬇ XLSX</button>
+      </div>
+    </div>
+    <div class="tablewrap" style="margin-top:14px;">
+      <table id="table"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const COLS = [
+  ["nome","Nome"],["categoria","Categoria"],["nota","Nota"],["avaliacoes","Avaliações"],
+  ["telefone","Telefone"],["endereco","Endereço"],["site","Site"],["plus_code","Plus Code"],["link_maps","Maps"]
+];
+let lastId = null;
+let es = null;
+
+function setStatus(msg){ $("status").textContent = msg; }
+function setBar(pct){ const b=$("bar"); b.style.display = pct==null?"none":"block"; if(pct!=null) $("barfill").style.width = pct+"%"; }
+
+function renderTable(rows){
+  const thead = $("table").querySelector("thead");
+  const tbody = $("table").querySelector("tbody");
+  thead.innerHTML = "<tr>" + COLS.map(c=>`<th>${c[1]}</th>`).join("") + "</tr>";
+  tbody.innerHTML = rows.map(r => "<tr>" + COLS.map(([k]) => {
+    let v = r[k] || "";
+    if((k==="site"||k==="link_maps") && v) v = `<a href="${v}" target="_blank" rel="noopener">link</a>`;
+    return `<td>${v}</td>`;
+  }).join("") + "</tr>").join("") || `<tr><td colspan="${COLS.length}" class="empty">Nada encontrado.</td></tr>`;
+}
+
+function start(){
+  const input = $("input").value.trim();
+  if(!input){ setStatus("Informe um link ou termo de busca."); return; }
+  if(es) es.close();
+
+  $("go").disabled = true;
+  $("resultsCard").style.display = "none";
+  setStatus("Iniciando...");
+  setBar(2);
+
+  const max = parseInt($("max").value,10) || 0;
+  const deep = $("deep").checked ? "1" : "0";
+  const url = `/api/scrape?input=${encodeURIComponent(input)}&max=${max}&deep=${deep}`;
+  es = new EventSource(url);
+
+  es.addEventListener("progress", (e) => {
+    const p = JSON.parse(e.data);
+    if(p.message) setStatus(p.message + (p.found!=null?`  (${p.found})`:""));
+    if(p.phase==="scroll" && p.found!=null) setBar(Math.min(40, 5 + p.found));
+    if(p.phase==="detail" && p.total) setBar(40 + Math.round(60 * p.current / p.total));
+  });
+
+  es.addEventListener("done", (e) => {
+    const d = JSON.parse(e.data);
+    lastId = d.id;
+    setBar(100);
+    setStatus(`Concluído: ${d.count} estabelecimentos.`);
+    $("count").textContent = `${d.count} leads`;
+    renderTable(d.rows);
+    $("resultsCard").style.display = "block";
+    $("csv").onclick = () => location.href = `/api/download/${lastId}.csv`;
+    $("xlsx").onclick = () => location.href = `/api/download/${lastId}.xlsx`;
+    $("go").disabled = false;
+    es.close();
+    setTimeout(()=>setBar(null), 1200);
+  });
+
+  es.addEventListener("error", (e) => {
+    let msg = "Erro de conexão com o servidor.";
+    try { if(e.data) msg = JSON.parse(e.data).message; } catch {}
+    setStatus("❌ " + msg);
+    $("go").disabled = false;
+    setBar(null);
+    es.close();
+  });
+}
+
+$("go").addEventListener("click", start);
+$("input").addEventListener("keydown", (e) => { if(e.key==="Enter") start(); });
+</script>
+</body>
+</html>
