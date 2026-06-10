@@ -14,6 +14,7 @@ const COLS_COM = [
   ["nome", "Nome"], ["categoria", "Categoria"], ["nota", "Nota"],
   ["avaliacoes", "Avaliações"], ["telefone", "Telefone"], ["whatsapp", "WhatsApp", "link"],
   ["site", "Site", "link"], ["redes_sociais", "Redes", "links"],
+  ["site_emails", "E-mails", "emails"],
   ["cwv_score", "Perf."], ["cwv_status", "Status", "cwv"],
   ["cwv_report", "Relatório", "report"],
   ["descricao", "Descrição"], ["link_maps", "Maps", "link"],
@@ -28,6 +29,10 @@ const COLS_SEM = [
 const state = { id: null, buscas: [], current: 0 };
 let scrapeES = null;
 let jobES = null; // SSE de enrich/sitetext (compartilham a barra)
+
+// Botões de job (compartilham a barra de progresso de enriquecimento).
+const JOB_BTNS = ["enrich", "sitetext", "emailScrape"];
+const setJobBtns = (disabled) => JOB_BTNS.forEach((id) => ($(id).disabled = disabled));
 
 const setStatus = (msg) => ($("status").textContent = msg);
 const setBar = (id, fillId, pct) => {
@@ -57,8 +62,16 @@ function renderCell(value, type, row) {
       .filter(Boolean)
       .map((u) => `<a href="${u}" target="_blank" rel="noopener">${hostOf(u)}</a>`)
       .join("<br>");
+  if (type === "emails")
+    return String(v)
+      .split(" | ")
+      .filter(Boolean)
+      .map((e) => `<a href="mailto:${e}">${e}</a>`)
+      .join("<br>");
   if (type === "cwv") {
-    const cls = v === "BOM" || v === "MÉDIO" || v === "RUIM" ? `cwv-${v}` : "cwv-NA";
+    let cls = "cwv-NA";
+    if (v === "BOM" || v === "MÉDIO" || v === "RUIM") cls = `cwv-${v}`;
+    else if (v === "FORA DO AR") cls = "cwv-fora";
     const title = row && row.cwv_erro ? ` title="${String(row.cwv_erro).replace(/"/g, "'")}"` : "";
     return `<span class="cwv ${cls}"${title}>${v}</span>`;
   }
@@ -249,8 +262,7 @@ function start() {
     $("resultsCard").style.display = "block";
 
     const totalCom = d.buscas.reduce((s, b) => s + b.stats.comSite, 0);
-    $("enrich").disabled = totalCom === 0;
-    $("sitetext").disabled = totalCom === 0;
+    setJobBtns(totalCom === 0);
     $("go").disabled = false;
     scrapeES.close();
     setTimeout(() => setBar("bar", "barfill", null), 1200);
@@ -270,8 +282,7 @@ function start() {
 function runJob(url, { startMsg, progressMsg, doneMsg }) {
   if (!state.id) return;
   if (jobES) jobES.close();
-  $("enrich").disabled = true;
-  $("sitetext").disabled = true;
+  setJobBtns(true);
   $("enrichStatus").textContent = startMsg;
   setBar("enrichBar", "enrichFill", 2);
 
@@ -291,8 +302,7 @@ function runJob(url, { startMsg, progressMsg, doneMsg }) {
     renderCurrent();
     $("enrichStatus").textContent = doneMsg(d);
     setBar("enrichBar", "enrichFill", 100);
-    $("enrich").disabled = false;
-    $("sitetext").disabled = false;
+    setJobBtns(false);
     jobES.close();
     setTimeout(() => setBar("enrichBar", "enrichFill", null), 1500);
   });
@@ -301,8 +311,7 @@ function runJob(url, { startMsg, progressMsg, doneMsg }) {
     let msg = "Erro na operação.";
     try { if (e.data) msg = JSON.parse(e.data).message; } catch {}
     $("enrichStatus").textContent = "❌ " + msg;
-    $("enrich").disabled = false;
-    $("sitetext").disabled = false;
+    setJobBtns(false);
     setBar("enrichBar", "enrichFill", null);
     jobES.close();
   });
@@ -315,11 +324,13 @@ function enrich() {
   });
   runJob(`/api/enrich/${state.id}?${params}`, {
     startMsg: "Analisando sites no PageSpeed...",
-    progressMsg: (p) => `PageSpeed ${p.current}/${p.total}: ${p.nome}`,
-    doneMsg: (d) =>
-      d.falhas > 0
-        ? `✅ ${d.ok} sites medidos, ${d.falhas} sem dados (passe o mouse no "N/A" para o motivo).`
-        : `✅ ${d.ok} sites medidos.`,
+    progressMsg: (p) => `${p.status === "FORA DO AR" ? "Fora do ar" : "PageSpeed"} ${p.current}/${p.total}: ${p.nome}`,
+    doneMsg: (d) => {
+      const partes = [`${d.ok} sites medidos`];
+      if (d.foraDoAr) partes.push(`${d.foraDoAr} fora do ar`);
+      if (d.falhas) partes.push(`${d.falhas} sem dados`);
+      return `✅ ${partes.join(", ")} (passe o mouse no status para o motivo).`;
+    },
   });
 }
 
@@ -332,6 +343,26 @@ function sitetext() {
       d.falhas > 0
         ? `✅ Texto de ${d.ok} sites, ${d.falhas} sem texto (veja a coluna na planilha).`
         : `✅ Texto de ${d.ok} sites coletado.`,
+  });
+}
+
+function emailScrape() {
+  const params = new URLSearchParams({ conc: parseInt($("conc").value, 10) || 6 });
+  // Fallback com navegador (sites JS): roda só nos leads que ficarem sem e-mail.
+  if (!$("renderJs").checked) params.set("render", "0");
+  runJob(`/api/emails/${state.id}?${params}`, {
+    startMsg: "Buscando e-mails (home + páginas de contato)...",
+    progressMsg: (p) => {
+      const rotulo = p.fase === "navegador" ? "Renderizando (sites JS)" : "E-mails";
+      return `${rotulo} ${p.current}/${p.total}: ${p.nome}` + (p.encontrados ? ` (${p.encontrados})` : "");
+    },
+    doneMsg: (d) => {
+      const partes = [`${d.ok} com e-mail`];
+      if (d.renderizados) partes.push(`${d.renderizados} via navegador`);
+      if (d.semEmail) partes.push(`${d.semEmail} sem e-mail`);
+      if (d.falhas) partes.push(`${d.falhas} falharam`);
+      return `✅ ${partes.join(", ")} (veja a coluna E-mails).`;
+    },
   });
 }
 
@@ -356,16 +387,152 @@ function setupDownloads() {
   });
 }
 
+// ---- Modal de exportação configurável ------------------------------------
+let exportCols = null; // { "com-site":[{key,header}], "sem-site":[...] }, carregado 1x
+
+/** Renderiza os checkboxes de colunas (todas marcadas) num container. */
+function renderColCheckboxes(containerId, cols) {
+  $(containerId).innerHTML = cols
+    .map(
+      (c) =>
+        `<label class="check"><input type="checkbox" value="${c.key}" checked /> ${c.header}</label>`
+    )
+    .join("");
+}
+
+/** Garante que as colunas foram buscadas do servidor e os checkboxes montados. */
+async function ensureExportCols() {
+  if (exportCols) return;
+  const res = await fetch("/api/columns");
+  exportCols = await res.json();
+  renderColCheckboxes("ex-cols-com", exportCols["com-site"]);
+  renderColCheckboxes("ex-cols-sem", exportCols["sem-site"]);
+}
+
+/** Soma de leads por lista, conforme a abrangência escolhida. */
+function exportCounts() {
+  const buscas = $("ex-scope").value === "current" ? [state.buscas[state.current]] : state.buscas;
+  return buscas.filter(Boolean).reduce(
+    (acc, b) => ({ com: acc.com + b.comSite.length, sem: acc.sem + b.semSite.length }),
+    { com: 0, sem: 0 }
+  );
+}
+
+/** Mostra/esconde o grupo de colunas conforme a lista esteja marcada. */
+function syncColGroups() {
+  $("ex-cols-com-wrap").style.display = $("ex-com").checked ? "" : "none";
+  $("ex-cols-sem-wrap").style.display = $("ex-sem").checked ? "" : "none";
+}
+
+function refreshExportCounts() {
+  const { com, sem } = exportCounts();
+  $("ex-com-n").textContent = com;
+  $("ex-sem-n").textContent = sem;
+}
+
+async function openExportModal() {
+  if (!state.id) return;
+  await ensureExportCols();
+  // Abrangência: só mostra "todas" quando há mais de uma busca.
+  $("ex-scope").value = state.buscas.length > 1 ? "all" : "current";
+  refreshExportCounts();
+  syncColGroups();
+  $("ex-status").textContent = "";
+  $("exportModal").style.display = "flex";
+}
+
+function closeExportModal() {
+  $("exportModal").style.display = "none";
+}
+
+/** Coleta a configuração escolhida no modal. */
+function exportConfig() {
+  const lists = [];
+  if ($("ex-com").checked) lists.push("com-site");
+  if ($("ex-sem").checked) lists.push("sem-site");
+  const formats = [];
+  if ($("ex-xlsx").checked) formats.push("xlsx");
+  if ($("ex-csv").checked) formats.push("csv");
+  const pick = (id) =>
+    [...document.querySelectorAll(`#${id} input:checked`)].map((i) => i.value);
+  return {
+    scope: $("ex-scope").value === "current" ? state.current : "all",
+    lists,
+    formats,
+    reports: $("ex-reports").value,
+    locale: $("ex-lang").value,
+    columns: { "com-site": pick("ex-cols-com"), "sem-site": pick("ex-cols-sem") },
+  };
+}
+
+async function runExport() {
+  const cfg = exportConfig();
+  if (!cfg.lists.length && cfg.reports === "none")
+    return ($("ex-status").textContent = "Selecione ao menos uma lista ou os relatórios.");
+  if (cfg.lists.length && !cfg.formats.length)
+    return ($("ex-status").textContent = "Selecione ao menos um formato (XLSX ou CSV).");
+
+  $("ex-go").disabled = true;
+  $("ex-status").textContent =
+    cfg.reports === "pdf" || cfg.reports === "both" ? "Gerando (PDF é mais lento)…" : "Gerando…";
+  try {
+    const res = await fetch(`/api/export/${state.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cfg),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.message || `Erro ${res.status}`);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const name = (cd.match(/filename="([^"]+)"/) || [])[1] || "leads-export.zip";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    closeExportModal();
+  } catch (e) {
+    $("ex-status").textContent = "❌ " + e.message;
+  } finally {
+    $("ex-go").disabled = false;
+  }
+}
+
+function setupExportModal() {
+  $("ex-com").addEventListener("change", syncColGroups);
+  $("ex-sem").addEventListener("change", syncColGroups);
+  $("ex-scope").addEventListener("change", refreshExportCounts);
+  $("ex-cancel").addEventListener("click", closeExportModal);
+  $("ex-go").addEventListener("click", runExport);
+  // Botão "marcar/desmarcar todas" de cada grupo de colunas.
+  document.querySelectorAll("[data-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const boxes = [...document.querySelectorAll(`#${btn.dataset.toggle} input`)];
+      const allOn = boxes.every((b) => b.checked);
+      boxes.forEach((b) => (b.checked = !allOn));
+    });
+  });
+  // Fecha ao clicar fora do card.
+  $("exportModal").addEventListener("click", (e) => {
+    if (e.target === $("exportModal")) closeExportModal();
+  });
+}
+
 $("go").addEventListener("click", start);
 $("enrich").addEventListener("click", enrich);
 $("sitetext").addEventListener("click", sitetext);
-$("exportZip").addEventListener("click", () => {
-  if (!state.id) return;
-  location.href = `/api/export/${state.id}.zip`;
-});
+$("emailScrape").addEventListener("click", emailScrape);
+$("exportZip").addEventListener("click", openExportModal);
 $("buscaSel").addEventListener("change", (e) => {
   state.current = parseInt(e.target.value, 10) || 0;
   renderCurrent();
 });
 setupTabs();
 setupDownloads();
+setupExportModal();

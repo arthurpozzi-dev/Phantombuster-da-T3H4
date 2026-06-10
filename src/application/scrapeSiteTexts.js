@@ -24,12 +24,12 @@ export async function scrapeSiteTexts(comSite = [], siteTextScraper, onProgress,
     concurrency: options.concurrency || DEFAULT_CONCURRENCY,
     task: async (lead) => {
       try {
-        const { text } = await siteTextScraper.fetchText(lead.site);
+        const { text, emails } = await siteTextScraper.fetchText(lead.site);
         ok++;
-        return { ...lead, site_texto: text, site_texto_erro: "" };
+        return { ...lead, site_texto: text, site_emails: (emails || []).join(" | "), site_texto_erro: "" };
       } catch (e) {
         falhas++;
-        return { ...lead, site_texto: "", site_texto_erro: e?.message || "falha" };
+        return { ...lead, site_texto: "", site_emails: "", site_texto_erro: e?.message || "falha" };
       }
     },
     onDone: (done, total, lead, result) =>

@@ -57,6 +57,10 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
           <span class="check"><input id="deep" type="checkbox" checked /> Abrir cada local</span>
         </div>
         <div style="flex: 0 0 auto;">
+          <label title="No botão Enriquecer e-mails: abre um navegador real só para os sites que ficaram sem e-mail (sites feitos em JavaScript). Mais lento, porém pega mais.">Fallback de e-mails</label>
+          <span class="check"><input id="renderJs" type="checkbox" checked /> Renderizar sites JS</span>
+        </div>
+        <div style="flex: 0 0 auto;">
           <button id="go">Buscar leads</button>
         </div>
       </div>
@@ -71,7 +75,8 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
       <div class="actions" style="margin-top:0;">
         <button id="enrich">⚡ Enriquecer sites (Core Web Vitals)</button>
         <button id="sitetext">🔤 Puxar texto dos sites</button>
-        <button id="exportZip">📦 Exportar tudo (.zip)</button>
+        <button id="emailScrape">📧 Enriquecer e-mails</button>
+        <button id="exportZip">📦 Exportar…</button>
       </div>
       <div class="status" id="enrichStatus"></div>
       <div class="bar" id="enrichBar"><i id="enrichFill"></i></div>
@@ -110,6 +115,70 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
           <table id="tableSem"><thead></thead><tbody></tbody></table>
         </div>
       </section>
+    </div>
+  </div>
+
+  <!-- Modal de exportação configurável -->
+  <div class="modal" id="exportModal" style="display:none;">
+    <div class="modalCard">
+      <h3>Exportar leads</h3>
+      <p class="sub">Monte uma exportação completa: escolha as listas, o formato, as colunas e os relatórios.</p>
+
+      <div class="modalGrid">
+        <fieldset class="exGroup">
+          <legend>Listas</legend>
+          <span class="check"><input type="checkbox" id="ex-com" checked /> Com site (<span id="ex-com-n">0</span>)</span>
+          <span class="check"><input type="checkbox" id="ex-sem" checked /> Sem site (<span id="ex-sem-n">0</span>)</span>
+        </fieldset>
+
+        <fieldset class="exGroup">
+          <legend>Abrangência</legend>
+          <select id="ex-scope">
+            <option value="all">Todas as buscas</option>
+            <option value="current">Só a busca atual</option>
+          </select>
+        </fieldset>
+
+        <fieldset class="exGroup">
+          <legend>Formato das planilhas</legend>
+          <span class="check"><input type="checkbox" id="ex-xlsx" checked /> XLSX (Excel)</span>
+          <span class="check"><input type="checkbox" id="ex-csv" /> CSV</span>
+        </fieldset>
+
+        <fieldset class="exGroup">
+          <legend>Relatórios dos sites</legend>
+          <select id="ex-reports">
+            <option value="none">Não incluir</option>
+            <option value="html" selected>HTML</option>
+            <option value="pdf">PDF</option>
+            <option value="both">HTML + PDF</option>
+          </select>
+          <label for="ex-lang" style="margin:12px 0 6px;">Idioma do relatório</label>
+          <select id="ex-lang">
+            <option value="pt-BR" selected>Português (Brasil)</option>
+            <option value="en-US">English (US)</option>
+            <option value="pt-PT">Português (Portugal)</option>
+            <option value="es">Español</option>
+          </select>
+          <small style="color:var(--muted); display:block; margin-top:8px;">Só para leads com site enriquecido (Core Web Vitals). PDF é mais lento.</small>
+        </fieldset>
+
+        <fieldset class="exGroup full" id="ex-cols-com-wrap">
+          <legend>Colunas — Com site <button type="button" class="linklike" data-toggle="ex-cols-com">marcar/desmarcar todas</button></legend>
+          <div class="colgrid" id="ex-cols-com"></div>
+        </fieldset>
+
+        <fieldset class="exGroup full" id="ex-cols-sem-wrap">
+          <legend>Colunas — Sem site <button type="button" class="linklike" data-toggle="ex-cols-sem">marcar/desmarcar todas</button></legend>
+          <div class="colgrid" id="ex-cols-sem"></div>
+        </fieldset>
+      </div>
+
+      <div class="modalActions">
+        <span id="ex-status"></span>
+        <button type="button" class="ghost" id="ex-cancel">Cancelar</button>
+        <button type="button" id="ex-go">⬇ Exportar (.zip)</button>
+      </div>
     </div>
   </div>
 

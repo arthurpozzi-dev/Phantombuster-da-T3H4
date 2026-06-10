@@ -90,14 +90,28 @@ async function handleConsent(page) {
   }
 }
 
-/** Rola o painel de resultados até carregar tudo (ou até o limite). */
-async function scrollFeed(page, { maxResults, onProgress }) {
-  await page.waitForSelector('div[role="feed"]', { timeout: 20000 });
-  let previous = 0;
-  let stable = 0;
+/** Conta os cards carregados no feed. */
+const countCards = (page) => page.locator('div[role="feed"] a.hfpxzc').count();
 
-  for (let i = 0; i < 60; i++) {
-    const count = await page.locator('div[role="feed"] a.hfpxzc').count();
+/**
+ * Rola o painel de resultados até carregar tudo (ou até o limite).
+ *
+ * Robustez: o Maps virtualiza/lazy-loada a lista. Em vez de uma espera fixa,
+ * rolamos o ÚLTIMO card para a viewport (dispara o carregamento melhor que um
+ * scrollTo) e aguardamos DINAMICAMENTE o número de cards crescer. Só desistimos
+ * após várias rodadas seguidas sem nenhum crescimento — evitando parar cedo
+ * demais em conexões lentas.
+ */
+async function scrollFeed(page, { maxResults, onProgress }) {
+  const feedSel = 'div[role="feed"]';
+  await page.waitForSelector(feedSel, { timeout: 20000 });
+
+  let stable = 0;
+  const MAX_STABLE = 8; // rodadas seguidas sem crescer antes de desistir
+  const MAX_ROUNDS = 200;
+
+  for (let i = 0; i < MAX_ROUNDS; i++) {
+    const count = await countCards(page);
     onProgress?.({ phase: "scroll", found: count });
     if (maxResults && count >= maxResults) break;
 
@@ -110,18 +124,28 @@ async function scrollFeed(page, { maxResults, onProgress }) {
       .catch(() => false);
     if (reachedEnd) break;
 
-    if (count === previous) {
-      if (++stable >= 4) break;
-    } else {
-      stable = 0;
-    }
-    previous = count;
+    // Empurra o final da lista para dentro da viewport (gatilho de lazy-load).
+    await page.evaluate((sel) => {
+      const feed = document.querySelector(sel);
+      if (!feed) return;
+      const cards = feed.querySelectorAll("a.hfpxzc");
+      const last = cards[cards.length - 1];
+      if (last) last.scrollIntoView({ block: "end", behavior: "instant" });
+      feed.scrollBy(0, 1200);
+    }, feedSel);
 
-    await page.evaluate(() => {
-      const feed = document.querySelector('div[role="feed"]');
-      if (feed) feed.scrollTo(0, feed.scrollHeight);
-    });
-    await page.waitForTimeout(1600);
+    // Espera dinâmica: até ~4s, saindo assim que aparecerem cards novos.
+    let grew = false;
+    for (let w = 0; w < 8; w++) {
+      await page.waitForTimeout(500);
+      if ((await countCards(page)) > count) {
+        grew = true;
+        break;
+      }
+    }
+
+    if (grew) stable = 0;
+    else if (++stable >= MAX_STABLE) break;
   }
 }
 
@@ -162,18 +186,14 @@ async function extractCards(page, maxResults) {
 }
 
 /**
- * Abre o painel de detalhe de um card e extrai os campos completos:
- * nome, categoria, nota, avaliações, telefone, site, redes sociais e descrição.
+ * Lê os campos do painel de detalhe JÁ ABERTO na página (nome, categoria, nota,
+ * avaliações, telefone, site, redes sociais, descrição).
+ *
+ * Não clica nem navega — quem garante que o painel é o do lugar certo é o
+ * chamador (que navega direto na URL única do lugar). Isso elimina a leitura de
+ * dados trocados que acontecia ao clicar card a card.
  */
-async function extractDetail(page, link, socialDomains) {
-  try {
-    await link.click({ timeout: 8000 });
-  } catch {
-    return null;
-  }
-  await page.waitForSelector("h1.DUwDvf", { timeout: 8000 }).catch(() => {});
-  await page.waitForTimeout(900);
-
+function readOpenDetail(page, socialDomains) {
   return page.evaluate((socials) => {
     const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
     const byItem = (id) => document.querySelector(`[data-item-id="${id}"]`);
@@ -323,31 +343,62 @@ export class GoogleMapsScraper {
       });
 
       if (deep && results.length) {
-        const links = await page.locator('div[role="feed"] a.hfpxzc').all();
-        const total = Math.min(results.length, links.length);
-        for (let i = 0; i < total; i++) {
-          progress({
-            phase: "detail",
-            message: `Coletando detalhes ${i + 1}/${total}...`,
-            current: i + 1,
-            total,
+        // Coleta detalhada DETERMINÍSTICA: em vez de clicar card a card (que
+        // deixava o painel dessincronizado e trazia dados trocados), navegamos
+        // direto na URL única de cada lugar, em paralelo (pool de abas).
+        const total = results.length;
+        let done = 0;
+        let next = 0;
+
+        const worker = async () => {
+          const wp = await context.newPage();
+          // Bloqueia imagens/fontes/mídia para acelerar bastante o carregamento.
+          await wp.route("**/*", (route) => {
+            const t = route.request().resourceType();
+            return t === "image" || t === "media" || t === "font"
+              ? route.abort()
+              : route.continue();
           });
-          const detail = await extractDetail(page, links[i], SOCIAL_DOMAINS);
-          if (detail) {
-            results[i] = {
-              ...results[i],
-              nome: detail.nome || results[i].nome,
-              categoria: detail.categoria || results[i].categoria,
-              nota: detail.nota || results[i].nota,
-              avaliacoes: detail.avaliacoes || results[i].avaliacoes,
-              telefone: detail.telefone || results[i].telefone,
-              site_bruto: detail.site_bruto || results[i].site_bruto,
-              redes_sociais: detail.redes_sociais || results[i].redes_sociais,
-              descricao: detail.descricao || results[i].descricao,
-            };
+          try {
+            while (next < total) {
+              const i = next++;
+              const url = results[i].link_maps;
+              if (url) {
+                try {
+                  await wp.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+                  await wp.waitForSelector("h1.DUwDvf", { timeout: 8000 }).catch(() => {});
+                  const d = await readOpenDetail(wp, SOCIAL_DOMAINS);
+                  results[i] = {
+                    ...results[i],
+                    nome: d.nome || results[i].nome,
+                    categoria: d.categoria || results[i].categoria,
+                    nota: d.nota || results[i].nota,
+                    avaliacoes: d.avaliacoes || results[i].avaliacoes,
+                    telefone: d.telefone || results[i].telefone,
+                    site_bruto: d.site_bruto || results[i].site_bruto,
+                    redes_sociais: d.redes_sociais || results[i].redes_sociais,
+                    descricao: d.descricao || results[i].descricao,
+                  };
+                } catch {
+                  /* mantém os dados do card se a navegação falhar */
+                }
+              }
+              progress({
+                phase: "detail",
+                message: `Coletando detalhes ${++done}/${total}...`,
+                current: done,
+                total,
+              });
+            }
+          } finally {
+            await wp.close();
           }
-          await page.waitForTimeout(300);
-        }
+        };
+
+        const DEEP_CONCURRENCY = 4;
+        await Promise.all(
+          Array.from({ length: Math.min(DEEP_CONCURRENCY, total) }, worker)
+        );
       }
 
       progress({ phase: "done", message: "Coleta concluída.", found: results.length });

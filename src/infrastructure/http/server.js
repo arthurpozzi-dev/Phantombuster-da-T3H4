@@ -12,6 +12,7 @@
  *   GET /api/scrape                         (SSE)  -> coleta + pipeline de N buscas
  *   GET /api/enrich/:id                     (SSE)  -> Core Web Vitals (todas as buscas)
  *   GET /api/sitetext/:id                   (SSE)  -> texto dos sites (todas as buscas)
+ *   GET /api/emails/:id                     (SSE)  -> scraping completo de e-mails (todas as buscas)
  *   GET /api/report/:id/lead/:b/:i.html            -> relatório persuasivo de 1 lead
  *   GET /api/export/:id.zip                         -> pacote (pasta por busca)
  *   GET /api/download/:id/:b/:list.:ext             -> CSV/XLSX de uma lista de uma busca
@@ -24,11 +25,13 @@ import { randomUUID } from "node:crypto";
 import { runPipeline } from "../../application/runPipeline.js";
 import { enrichLeads } from "../../application/EnrichLeads.js";
 import { scrapeSiteTexts } from "../../application/scrapeSiteTexts.js";
+import { enrichEmails } from "../../application/enrichEmails.js";
 import { PageSpeedClient } from "../pagespeed/PageSpeedClient.js";
 import { toCSV } from "../export/csvExporter.js";
 import { toXLSX } from "../export/xlsxExporter.js";
 import { columnsFor } from "../export/columns.js";
 import { slugify } from "../export/slug.js";
+import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from "../../application/reportI18n/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../../../public");
@@ -62,11 +65,15 @@ const totalComSite = (buscas) => buscas.reduce((s, b) => s + b.comSite.length, 0
  * @param {Object} deps
  * @param {import("../scraper/GoogleMapsScraper.js").GoogleMapsScraper} deps.scraper
  * @param {import("../scraper/SiteTextScraper.js").SiteTextScraper} deps.siteTextScraper
+ * @param {import("../scraper/EmailScraper.js").EmailScraper} deps.emailScraper
+ * @param {() => import("../scraper/BrowserEmailScraper.js").BrowserEmailScraper} [deps.makeBrowserEmailScraper] fábrica (1 instância por requisição)
+ * @param {() => import("../report/PdfRenderer.js").PdfRenderer} [deps.makePdfRenderer] fábrica de PDF (1 por requisição)
  * @param {import("../report/AuditReportRenderer.js").AuditReportRenderer} deps.reportRenderer
  * @param {import("../export/ExportBundle.js").ExportBundle} deps.exportBundle
+ * @param {import("../scraper/SiteHealthChecker.js").SiteHealthChecker} deps.siteHealthChecker
  * @returns {import("express").Express}
  */
-export function createServer({ scraper, siteTextScraper, reportRenderer, exportBundle }) {
+export function createServer({ scraper, siteTextScraper, emailScraper, makeBrowserEmailScraper, makePdfRenderer, reportRenderer, exportBundle, siteHealthChecker }) {
   const app = express();
   app.use(express.json());
   app.use(express.static(PUBLIC_DIR));
@@ -149,23 +156,25 @@ export function createServer({ scraper, siteTextScraper, reportRenderer, exportB
     let done = 0;
     let ok = 0;
     let falhas = 0;
+    let foraDoAr = 0;
     try {
       for (const b of item.buscas) {
         const r = await enrichLeads(
           b.comSite,
           client,
           (p) => {
-            if (p.erro) console.warn(`[enrich] N/A "${p.nome}": ${p.erro}`);
+            if (p.erro) console.warn(`[enrich] ${p.status} "${p.nome}": ${p.erro}`);
             send("progress", { current: ++done, total, nome: p.nome, status: p.status, query: b.query });
           },
-          { concurrency }
+          { concurrency, healthChecker: siteHealthChecker }
         );
         b.comSite = r.leads;
         ok += r.ok;
         falhas += r.falhas;
+        foraDoAr += r.foraDoAr;
       }
       item.ts = Date.now();
-      send("done", { ok, falhas, comSitePerBusca: item.buscas.map((b) => b.comSite) });
+      send("done", { ok, falhas, foraDoAr, comSitePerBusca: item.buscas.map((b) => b.comSite) });
     } catch (err) {
       send("error", { message: err.message || "Falha no enriquecimento." });
     } finally {
@@ -209,6 +218,56 @@ export function createServer({ scraper, siteTextScraper, reportRenderer, exportB
     }
   });
 
+  // ---- Scraping completo de e-mails em todas as buscas ------------------
+  app.get("/api/emails/:id", async (req, res) => {
+    const send = sseSender(res);
+    const item = store.get(req.params.id);
+    if (!item) {
+      send("error", { message: "Resultado expirado. Faça uma nova busca." });
+      return res.end();
+    }
+    const concurrency =
+      parseInt(req.query.conc, 10) || parseInt(process.env.EMAIL_CONCURRENCY, 10) || 6;
+    // Fallback com navegador (sites JS): ligado por padrão, desligável com render=0.
+    const useBrowser = req.query.render !== "0" && typeof makeBrowserEmailScraper === "function";
+    const browserScraper = useBrowser ? makeBrowserEmailScraper() : null;
+    const browserConcurrency =
+      parseInt(req.query.bconc, 10) || parseInt(process.env.EMAIL_BROWSER_CONCURRENCY, 10) || 2;
+
+    let ok = 0;
+    let semEmail = 0;
+    let falhas = 0;
+    let renderizados = 0;
+    // Progresso por fase: cada fase reporta seu próprio current/total (a barra reinicia).
+    const sendProgress = (p, query) =>
+      send("progress", { fase: p.fase, current: p.current, total: p.total, nome: p.nome, encontrados: p.encontrados, query });
+    try {
+      for (const b of item.buscas) {
+        const r = await enrichEmails(
+          b.comSite,
+          emailScraper,
+          (p) => {
+            if (p.erro) console.warn(`[emails] "${p.nome}": ${p.erro}`);
+            sendProgress(p, b.query);
+          },
+          { concurrency, browserScraper, browserConcurrency }
+        );
+        b.comSite = r.leads;
+        ok += r.ok;
+        semEmail += r.semEmail;
+        falhas += r.falhas;
+        renderizados += r.renderizados;
+      }
+      item.ts = Date.now();
+      send("done", { ok, semEmail, falhas, renderizados, comSitePerBusca: item.buscas.map((b) => b.comSite) });
+    } catch (err) {
+      send("error", { message: err.message || "Falha ao buscar e-mails." });
+    } finally {
+      await browserScraper?.close();
+      res.end();
+    }
+  });
+
   // ---- Relatório persuasivo de 1 lead (busca b, índice i) ---------------
   app.get("/api/report/:id/lead/:b/:i.html", (req, res) => {
     const item = store.get(req.params.id);
@@ -218,11 +277,61 @@ export function createServer({ scraper, siteTextScraper, reportRenderer, exportB
     if (!lead) return res.status(404).send("Lead não encontrado.");
     if (!lead.cwv_report)
       return res.status(409).send("Enriqueça os sites (Core Web Vitals) antes de gerar o relatório.");
+    const locale = SUPPORTED_LOCALES.includes(req.query.lang) ? req.query.lang : DEFAULT_LOCALE;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(reportRenderer.render(lead));
+    res.send(reportRenderer.render(lead, { locale }));
   });
 
-  // ---- Pacote completo (.zip): pasta por busca --------------------------
+  // ---- Colunas disponíveis por lista (para a tela de exportação) --------
+  app.get("/api/columns", (req, res) => {
+    res.json({ "com-site": columnsFor("com-site"), "sem-site": columnsFor("sem-site") });
+  });
+
+  // ---- Exportação configurável (.zip): listas/formatos/colunas/relatórios -
+  app.post("/api/export/:id", async (req, res) => {
+    const item = store.get(req.params.id);
+    if (!item) return res.status(404).json({ message: "Resultado expirado. Faça uma nova busca." });
+
+    const cfg = req.body || {};
+    const lists = (Array.isArray(cfg.lists) ? cfg.lists : []).filter(
+      (l) => l === "com-site" || l === "sem-site"
+    );
+    const formats = (Array.isArray(cfg.formats) ? cfg.formats : []).filter(
+      (f) => f === "csv" || f === "xlsx"
+    );
+    const reports = ["none", "html", "pdf", "both"].includes(cfg.reports) ? cfg.reports : "none";
+    const locale = SUPPORTED_LOCALES.includes(cfg.locale) ? cfg.locale : DEFAULT_LOCALE;
+    const columns =
+      cfg.columns && typeof cfg.columns === "object" && !Array.isArray(cfg.columns) ? cfg.columns : null;
+
+    // Abrangência: todas as buscas (padrão) ou só uma (índice).
+    const buscas =
+      cfg.scope === "all" || cfg.scope == null
+        ? item.buscas
+        : [item.buscas[parseInt(cfg.scope, 10)]].filter(Boolean);
+
+    if (!buscas.length) return res.status(400).json({ message: "Nenhuma busca selecionada." });
+    if (!lists.length && reports === "none")
+      return res.status(400).json({ message: "Selecione ao menos uma lista ou os relatórios." });
+    if (lists.length && !formats.length)
+      return res.status(400).json({ message: "Selecione ao menos um formato (CSV ou XLSX)." });
+
+    const needsPdf = (reports === "pdf" || reports === "both") && typeof makePdfRenderer === "function";
+    const pdfRenderer = needsPdf ? makePdfRenderer() : null;
+    try {
+      const { buffer } = await exportBundle.build(buscas, { lists, formats, columns, reports, pdfRenderer, locale });
+      const base = buscas.length === 1 ? slugify(buscas[0].query, "leads") : "leads";
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${base}-export.zip"`);
+      res.send(buffer);
+    } catch (err) {
+      res.status(500).json({ message: err.message || "Falha ao exportar." });
+    } finally {
+      await pdfRenderer?.close();
+    }
+  });
+
+  // ---- Pacote completo (.zip): pasta por busca (padrão; compatibilidade) -
   app.get("/api/export/:id.zip", async (req, res) => {
     const item = store.get(req.params.id);
     if (!item) return res.status(404).send("Resultado expirado. Faça uma nova busca.");

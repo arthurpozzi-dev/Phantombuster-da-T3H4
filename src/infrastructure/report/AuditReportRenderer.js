@@ -10,7 +10,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildAuditReportModel } from "../../application/buildAuditReportModel.js";
-import { slugify } from "../export/slug.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = path.join(__dirname, "audit-template.html");
@@ -33,17 +32,13 @@ export class AuditReportRenderer {
   }
 
   /**
-   * Renderiza o HTML do relatório de um lead enriquecido.
+   * Renderiza o HTML do relatório de um lead enriquecido, no idioma pedido.
    * @param {import("../../domain/Lead.js").Lead & { cwv_report?: any }} lead
+   * @param {{ locale?: string }} [opts]
    * @returns {string} HTML completo.
    */
-  render(lead) {
-    const model = buildAuditReportModel(lead, { ctaUrl: this.ctaUrl });
+  render(lead, opts = {}) {
+    const model = buildAuditReportModel(lead, { ctaUrl: this.ctaUrl, locale: opts.locale });
     return fillTemplate(this.template, model);
-  }
-
-  /** Nome-base do arquivo HTML do relatório de um lead (sem deduplicação). */
-  static fileName(nome) {
-    return `relatorio-${slugify(nome, "lead")}.html`;
   }
 }

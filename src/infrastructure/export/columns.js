@@ -45,6 +45,7 @@ export const COLUMNS_COM_SITE = [
   { key: "cwv_campo", header: "CrUX (campo)" },
   { key: "cwv_oportunidades", header: "Oportunidades (PageSpeed)" },
   // Conteúdo do site e referência ao relatório exportado
+  { key: "site_emails", header: "E-mails" },
   { key: "site_texto", header: "Texto do Site" },
   { key: "relatorio_arquivo", header: "Arquivo Relatório" },
   { key: "descricao", header: "Descrição" },
@@ -58,4 +59,20 @@ export const COLUMNS_COM_SITE = [
  */
 export function columnsFor(list) {
   return list === "com-site" ? COLUMNS_COM_SITE : COLUMNS_SEM_SITE;
+}
+
+/**
+ * Filtra as colunas de uma lista mantendo só as chaves pedidas (na ordem
+ * canônica). Chaves vazias/ausentes => todas as colunas. Chaves desconhecidas
+ * são ignoradas.
+ * @param {"com-site"|"sem-site"} list
+ * @param {string[]} [keys]
+ * @returns {{key: string, header: string}[]}
+ */
+export function pickColumns(list, keys) {
+  const all = columnsFor(list);
+  if (!Array.isArray(keys) || !keys.length) return all;
+  const wanted = new Set(keys);
+  const picked = all.filter((c) => wanted.has(c.key));
+  return picked.length ? picked : all;
 }

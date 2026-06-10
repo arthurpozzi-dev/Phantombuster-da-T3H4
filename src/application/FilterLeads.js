@@ -5,6 +5,9 @@
  * mínima. Os limites têm padrões (5–100 avaliações, nota 4,0) mas são ajustáveis
  * pela interface.
  *
+ * Leads sem reputação (sem nota / sem avaliações) só passam quando o mínimo de
+ * avaliações é 0 — útil para incluir negócios novos que ainda não têm reviews.
+ *
  * Função pura.
  */
 
@@ -32,7 +35,10 @@ export function filterLeads(leads = [], options = {}) {
   return leads.filter((lead) => {
     const aval = lead.avaliacoes;
     const nota = lead.nota;
-    if (aval === null || nota === null) return false; // sem dados de reputação
+    // Sem dados de reputação (empresa nova / sem reviews): só entram quando o
+    // usuário zera o mínimo de avaliações — não dá para exigir estrelas de quem
+    // não tem nota. Com mínimo > 0, continuam fora.
+    if (aval === null || nota === null) return minAvaliacoes === 0;
     if (aval < minAvaliacoes || aval > maxAvaliacoes) return false;
     if (nota < notaMin) return false;
     return true;

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="{{HTML_LANG}}">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Auditoria de Presença Digital — {{LEAD_NAME}}</title>
+<title>{{DOC_TITLE}}</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%23050505'/%3E%3Ctext x='32' y='38' text-anchor='middle' font-family='Inter,Arial,sans-serif' font-weight='900' font-size='18' fill='%23E5FF00'%3ET3H4%3C/text%3E%3C/svg%3E"/>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
@@ -58,9 +58,9 @@
 <header class="wrap" style="padding-top:4rem;padding-bottom:3rem;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5rem;">
     <div style="font-weight:900;font-size:1.25rem;letter-spacing:-0.02em;color:#fff;">T3H4<span style="color:var(--accent);">.</span></div>
-    <div class="font-mono" style="font-size:0.65rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.15em;">Auditoria · {{DATE}}</div>
+    <div class="font-mono" style="font-size:0.65rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.15em;">{{KICKER_AUDIT}} · {{DATE}}</div>
   </div>
-  <div class="eyebrow" style="margin-bottom:1.5rem;">Auditoria de Presença Digital</div>
+  <div class="eyebrow" style="margin-bottom:1.5rem;">{{TAGLINE}}</div>
   <h1 style="font-size:clamp(2.5rem,6vw,4rem);font-weight:300;line-height:1.05;letter-spacing:-0.03em;color:#fff;margin:0 0 1.5rem;">{{LEAD_NAME_HTML}}</h1>
   <p style="max-width:34rem;color:var(--muted);font-size:1.05rem;line-height:1.6;margin:0;">{{SUBTITLE}}</p>
 </header>
@@ -75,11 +75,11 @@
       </svg>
       <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
         <span style="font-size:3rem;font-weight:800;color:var(--accent);line-height:1;">{{SCORE_GERAL}}</span>
-        <span class="font-mono" style="font-size:0.6rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.15em;">de 10</span>
+        <span class="font-mono" style="font-size:0.6rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.15em;">{{LABEL_OUT_OF_10}}</span>
       </div>
     </div>
     <div>
-      <div class="eyebrow" style="margin-bottom:1rem;">Resultado geral</div>
+      <div class="eyebrow" style="margin-bottom:1rem;">{{LABEL_OVERALL}}</div>
       <p style="font-size:1.15rem;line-height:1.6;color:var(--text);margin:0 0 1rem;">{{RESUMO_1}}</p>
       <p style="font-size:1.05rem;line-height:1.6;color:var(--muted);margin:0;">{{RESUMO_2}}</p>
     </div>
@@ -88,18 +88,18 @@
 
 <!-- CONTRASTE -->
 <section class="wrap" style="padding:2rem 1.5rem 4rem;">
-  <div class="sec-title"><span class="num">01</span><h2>Sua reputação vs. seu site</h2><span class="line"></span></div>
+  <div class="sec-title"><span class="num">01</span><h2>{{SEC_REP_VS_SITE}}</h2><span class="line"></span></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
     <div class="card contrast-good">
-      <span class="tag green" style="margin-bottom:1rem;display:inline-block;">O que você construiu</span>
+      <span class="tag green" style="margin-bottom:1rem;display:inline-block;">{{LABEL_WHAT_BUILT}}</span>
       <div style="display:flex;flex-direction:column;gap:1rem;margin-top:0.5rem;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="color:var(--muted);font-size:0.9rem;">Avaliação no Google</span><span style="color:var(--green);font-weight:700;font-size:1.5rem;">{{REP_RATING}} ★</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="color:var(--muted);font-size:0.9rem;">Nº de avaliações</span><span style="color:#fff;font-weight:600;font-size:1.25rem;">{{REP_REVIEWS}}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="color:var(--muted);font-size:0.9rem;">Reputação</span><span style="color:#fff;font-weight:600;font-size:1.25rem;">{{REP_RANK}}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="color:var(--muted);font-size:0.9rem;">{{LABEL_GOOGLE_RATING}}</span><span style="color:var(--green);font-weight:700;font-size:1.5rem;">{{REP_RATING}} ★</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="color:var(--muted);font-size:0.9rem;">{{LABEL_NUM_REVIEWS}}</span><span style="color:#fff;font-weight:600;font-size:1.25rem;">{{REP_REVIEWS}}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="color:var(--muted);font-size:0.9rem;">{{LABEL_REPUTATION}}</span><span style="color:#fff;font-weight:600;font-size:1.25rem;">{{REP_RANK}}</span></div>
       </div>
     </div>
     <div class="card contrast-bad">
-      <span class="tag red" style="margin-bottom:1rem;display:inline-block;">O que o cliente encontra</span>
+      <span class="tag red" style="margin-bottom:1rem;display:inline-block;">{{LABEL_WHAT_CLIENT_FINDS}}</span>
       <div style="display:flex;flex-direction:column;gap:1rem;margin-top:0.5rem;">{{CONTRASTE_SITE}}</div>
     </div>
   </div>
@@ -107,15 +107,15 @@
 
 <!-- DIAGNÓSTICO POR DIMENSÃO -->
 <section class="wrap" style="padding:2rem 1.5rem 4rem;">
-  <div class="sec-title"><span class="num">02</span><h2>Diagnóstico ponto a ponto</h2><span class="line"></span></div>
+  <div class="sec-title"><span class="num">02</span><h2>{{SEC_DIAGNOSIS}}</h2><span class="line"></span></div>
   <div style="display:flex;flex-direction:column;gap:1.25rem;">{{DIMENSOES}}</div>
 </section>
 
 <!-- O QUE ISSO CUSTA -->
 <section class="wrap" style="padding:2rem 1.5rem 4rem;">
-  <div class="sec-title"><span class="num">03</span><h2>O que isso está custando</h2><span class="line"></span></div>
+  <div class="sec-title"><span class="num">03</span><h2>{{SEC_COST}}</h2><span class="line"></span></div>
   <div class="card" style="padding:2.5rem;text-align:center;">
-    <div class="eyebrow" style="justify-content:center;margin-bottom:1.5rem;">Estimativa conservadora</div>
+    <div class="eyebrow" style="justify-content:center;margin-bottom:1.5rem;">{{LABEL_CONSERVATIVE_EST}}</div>
     <p style="font-size:clamp(1.5rem,4vw,2.25rem);font-weight:300;line-height:1.3;color:#fff;margin:0 auto 1rem;max-width:36rem;letter-spacing:-0.02em;">{{IMPACTO_DESTAQUE}}</p>
     <p style="color:var(--muted);font-size:0.95rem;line-height:1.6;max-width:34rem;margin:0 auto;">{{IMPACTO_TEXTO}}</p>
   </div>
@@ -124,14 +124,14 @@
 <!-- PRÓXIMO PASSO -->
 <section class="wrap" style="padding:2rem 1.5rem 5rem;">
   <div class="card" style="padding:3rem;text-align:center;background:var(--surface-2);">
-    <div class="eyebrow" style="justify-content:center;margin-bottom:1.5rem;">Próximo passo</div>
+    <div class="eyebrow" style="justify-content:center;margin-bottom:1.5rem;">{{LABEL_NEXT_STEP}}</div>
     <h2 style="font-size:clamp(1.75rem,4vw,2.5rem);font-weight:300;line-height:1.15;color:#fff;margin:0 0 1.25rem;letter-spacing:-0.02em;">{{PROXIMO_TITULO}}</h2>
     <p style="color:var(--muted);font-size:1rem;line-height:1.6;max-width:32rem;margin:0 auto 2rem;">{{PROXIMO_TEXTO}}</p>
-    <a href="{{REBUILD_LINK}}" class="btn">Ver a versão reconstruída <iconify-icon icon="solar:arrow-right-linear" width="18"></iconify-icon></a>
+    <a href="{{REBUILD_LINK}}" class="btn">{{CTA_REBUILD}} <iconify-icon icon="solar:arrow-right-linear" width="18"></iconify-icon></a>
   </div>
   <div style="margin-top:3rem;padding-top:2rem;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
     <div style="font-weight:900;font-size:1rem;color:#fff;">T3H4<span style="color:var(--accent);">.</span></div>
-    <div class="font-mono" style="font-size:0.6rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.15em;">Auditoria gerada em {{DATE}} · t3h4.com.br</div>
+    <div class="font-mono" style="font-size:0.6rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.15em;">{{FOOTER_GENERATED}}</div>
   </div>
 </section>
 

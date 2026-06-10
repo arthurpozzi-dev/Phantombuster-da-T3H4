@@ -28,16 +28,27 @@ function joinOpportunities(report) {
  * @param {import("../domain/Lead.js").Lead[]} comSite
  * @param {{ analyze: (url:string)=>Promise<any> }} pageSpeedClient
  * @param {(p: { current:number, total:number, nome:string, status:string, erro?:string }) => void} [onProgress]
- * @param {{ concurrency?: number }} [options]
- * @returns {Promise<{ leads: import("../domain/Lead.js").Lead[], ok: number, falhas: number }>}
+ * @param {{ concurrency?: number, healthChecker?: { check:(url:string)=>Promise<{down:boolean,reason?:string}> } }} [options]
+ * @returns {Promise<{ leads: import("../domain/Lead.js").Lead[], ok: number, falhas: number, foraDoAr: number }>}
  */
 export async function enrichLeads(comSite = [], pageSpeedClient, onProgress, options = {}) {
   let ok = 0;
   let falhas = 0;
+  let foraDoAr = 0;
+  const healthChecker = options.healthChecker;
 
   const leads = await runPool(comSite, {
     concurrency: options.concurrency || DEFAULT_CONCURRENCY,
     task: async (lead) => {
+      // Antes de medir: o site está mesmo no ar? Página de erro/404 carrega
+      // rápido e enganaria o PageSpeed com uma nota boa.
+      if (healthChecker) {
+        const h = await healthChecker.check(lead.site);
+        if (h.down) {
+          foraDoAr++;
+          return { ...lead, cwv_score: null, cwv_status: "FORA DO AR", cwv_erro: h.reason || "site fora do ar" };
+        }
+      }
       try {
         const report = await pageSpeedClient.analyze(lead.site);
         const status = classifyCwv(report.score);
@@ -78,5 +89,5 @@ export async function enrichLeads(comSite = [], pageSpeedClient, onProgress, opt
       }),
   });
 
-  return { leads, ok, falhas };
+  return { leads, ok, falhas, foraDoAr };
 }

@@ -134,3 +134,17 @@ export function hasUsefulContact(lead) {
     lead.telefone || lead.site_bruto || lead.redes_sociais || lead.link_maps
   );
 }
+
+/**
+ * Extrai o identificador único do lugar (CID/feature id, ex.: "0xabc:0xdef")
+ * de um link do Google Maps. Esse id é estável por estabelecimento: dois cards
+ * do MESMO lugar têm o mesmo id, lugares diferentes têm ids diferentes — por
+ * isso é a melhor chave de deduplicação.
+ * @param {string} url
+ * @returns {string} o id, ou "" se não encontrar.
+ */
+export function extractPlaceId(url) {
+  const decoded = decodeURIComponent(url || "");
+  const m = decoded.match(/0x[0-9a-f]+:0x[0-9a-f]+/i);
+  return m ? m[0].toLowerCase() : "";
+}
