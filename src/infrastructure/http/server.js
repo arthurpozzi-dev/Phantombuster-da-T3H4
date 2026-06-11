@@ -301,6 +301,7 @@ export function createServer({ scraper, siteTextScraper, emailScraper, makeBrows
     );
     const reports = ["none", "html", "pdf", "both"].includes(cfg.reports) ? cfg.reports : "none";
     const locale = SUPPORTED_LOCALES.includes(cfg.locale) ? cfg.locale : DEFAULT_LOCALE;
+    const onlyWithEmail = cfg.onlyWithEmail === true;
     const columns =
       cfg.columns && typeof cfg.columns === "object" && !Array.isArray(cfg.columns) ? cfg.columns : null;
 
@@ -319,7 +320,7 @@ export function createServer({ scraper, siteTextScraper, emailScraper, makeBrows
     const needsPdf = (reports === "pdf" || reports === "both") && typeof makePdfRenderer === "function";
     const pdfRenderer = needsPdf ? makePdfRenderer() : null;
     try {
-      const { buffer } = await exportBundle.build(buscas, { lists, formats, columns, reports, pdfRenderer, locale });
+      const { buffer } = await exportBundle.build(buscas, { lists, formats, columns, reports, pdfRenderer, locale, onlyWithEmail });
       const base = buscas.length === 1 ? slugify(buscas[0].query, "leads") : "leads";
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${base}-export.zip"`);

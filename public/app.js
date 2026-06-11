@@ -409,11 +409,14 @@ async function ensureExportCols() {
   renderColCheckboxes("ex-cols-sem", exportCols["sem-site"]);
 }
 
-/** Soma de leads por lista, conforme a abrangência escolhida. */
+/** Soma de leads por lista, conforme a abrangência e o filtro de e-mail. */
 function exportCounts() {
   const buscas = $("ex-scope").value === "current" ? [state.buscas[state.current]] : state.buscas;
+  const onlyEmail = $("ex-only-email").checked;
+  const has = (l) => String(l.site_emails || "").trim() !== "";
+  const n = (rows) => (onlyEmail ? rows.filter(has).length : rows.length);
   return buscas.filter(Boolean).reduce(
-    (acc, b) => ({ com: acc.com + b.comSite.length, sem: acc.sem + b.semSite.length }),
+    (acc, b) => ({ com: acc.com + n(b.comSite), sem: acc.sem + n(b.semSite) }),
     { com: 0, sem: 0 }
   );
 }
@@ -461,6 +464,7 @@ function exportConfig() {
     formats,
     reports: $("ex-reports").value,
     locale: $("ex-lang").value,
+    onlyWithEmail: $("ex-only-email").checked,
     columns: { "com-site": pick("ex-cols-com"), "sem-site": pick("ex-cols-sem") },
   };
 }
@@ -508,6 +512,7 @@ function setupExportModal() {
   $("ex-com").addEventListener("change", syncColGroups);
   $("ex-sem").addEventListener("change", syncColGroups);
   $("ex-scope").addEventListener("change", refreshExportCounts);
+  $("ex-only-email").addEventListener("change", refreshExportCounts);
   $("ex-cancel").addEventListener("click", closeExportModal);
   $("ex-go").addEventListener("click", runExport);
   // Botão "marcar/desmarcar todas" de cada grupo de colunas.

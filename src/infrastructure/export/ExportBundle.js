@@ -36,6 +36,7 @@ export class ExportBundle {
    * @param {"none"|"html"|"pdf"|"both"} [options.reports="html"] relatórios a incluir
    * @param {{ render:(html:string)=>Promise<Buffer> }} [options.pdfRenderer] necessário p/ PDF
    * @param {string} [options.locale] idioma dos relatórios (ex.: "pt-BR", "en-US")
+   * @param {boolean} [options.onlyWithEmail=false] exporta só leads com `site_emails` preenchido
    * @returns {Promise<{ buffer: Buffer, totalReports: number }>}
    */
   async build(buscas, options = {}) {
@@ -46,7 +47,11 @@ export class ExportBundle {
       reports = "html",
       pdfRenderer = null,
       locale = undefined,
+      onlyWithEmail = false,
     } = options;
+
+    const hasEmail = (lead) => String(lead.site_emails || "").trim() !== "";
+    const keep = (rows) => (onlyWithEmail ? rows.filter(hasEmail) : rows);
 
     const wantHtml = reports === "html" || reports === "both";
     const wantPdf = (reports === "pdf" || reports === "both") && !!pdfRenderer;
@@ -71,7 +76,7 @@ export class ExportBundle {
       // 1) Relatórios (HTML/PDF) e referência do arquivo em cada lead enriquecido.
       const usedFiles = new Map();
       const comSite = [];
-      for (const lead of busca.comSite) {
+      for (const lead of keep(busca.comSite)) {
         if (!lead.cwv_report || reports === "none") {
           comSite.push({ ...lead, relatorio_arquivo: "" });
           continue;
@@ -97,7 +102,7 @@ export class ExportBundle {
       }
 
       // 2) Planilhas, nos formatos e colunas escolhidos.
-      const rowsByList = { "com-site": comSite, "sem-site": busca.semSite };
+      const rowsByList = { "com-site": comSite, "sem-site": keep(busca.semSite) };
       for (const list of lists) {
         const rows = rowsByList[list];
         if (!rows) continue;
