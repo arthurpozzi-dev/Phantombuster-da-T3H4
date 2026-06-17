@@ -13,13 +13,14 @@ import { CruxClient } from "../pagespeed/CruxClient.js";
 
 export function buildEnrichClients({
   apiKey,
+  lighthouseUrl,
   deep = false,
   strategy = "mobile",
   PageSpeedClientCtor = PageSpeedClient,
   CruxClientCtor = CruxClient,
 } = {}) {
   const categories = deep ? ALL_CATEGORIES : ["performance"];
-  const pageSpeed = new PageSpeedClientCtor({ apiKey, categories, strategy });
+  const pageSpeed = new PageSpeedClientCtor({ apiKey, baseUrl: lighthouseUrl || "", categories, strategy });
   const crux = deep ? null : new CruxClientCtor({ apiKey });
   return { pageSpeed, crux, categories };
 }

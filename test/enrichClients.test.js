@@ -27,3 +27,19 @@ test("fast mode builds perf-only PageSpeed client and a CrUX client", () => {
   assert.ok(crux instanceof SpyCrux);
   assert.equal(crux.opts.apiKey, "k");
 });
+
+test("lighthouseUrl is forwarded as the PageSpeed baseUrl", () => {
+  const { pageSpeed } = buildEnrichClients({
+    apiKey: "k", deep: false, lighthouseUrl: "https://lh.local/run",
+    PageSpeedClientCtor: SpyPS, CruxClientCtor: SpyCrux,
+  });
+  assert.equal(pageSpeed.opts.baseUrl, "https://lh.local/run");
+});
+
+test("fast mode still builds a CrUX client when lighthouseUrl is set", () => {
+  const { crux } = buildEnrichClients({
+    apiKey: "k", deep: false, lighthouseUrl: "https://lh.local/run",
+    PageSpeedClientCtor: SpyPS, CruxClientCtor: SpyCrux,
+  });
+  assert.ok(crux instanceof SpyCrux);
+});
