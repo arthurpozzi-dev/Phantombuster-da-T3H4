@@ -44,7 +44,9 @@ function fieldMetric(metrics, key) {
 
 /** Monta o relatório completo a partir da resposta crua da API. */
 function buildReport(data) {
-  const lh = data.lighthouseResult || {};
+  // Aceita o envelope do PageSpeed v5 ({ lighthouseResult }) OU o lhr cru no topo
+  // (instâncias self-hosted que devolvem o Lighthouse Result direto).
+  const lh = data.lighthouseResult || data || {};
   const cat = lh.categories || {};
   const audits = lh.audits || {};
   const le = data.loadingExperience || {};
@@ -104,14 +106,16 @@ export class PageSpeedClient {
   /**
    * @param {Object} [options]
    * @param {string} [options.apiKey]   chave da API (sobrepõe a env)
+   * @param {string} [options.baseUrl]  URL base da instância self-hosted (substitui o endpoint do Google)
    * @param {"mobile"|"desktop"} [options.strategy="mobile"]
    * @param {number} [options.timeoutMs=45000]   timeout por tentativa
    * @param {number} [options.maxRetries=1]       tentativas extras em falha transitória
    * @param {string[]} [options.categories=["performance"]]  categorias do Lighthouse a pedir
    * @param {typeof fetch} [options.fetchImpl]   injeção para testes
    */
-  constructor({ apiKey, strategy = "mobile", timeoutMs = 45000, maxRetries = 1, categories = ["performance"], fetchImpl } = {}) {
+  constructor({ apiKey, baseUrl, strategy = "mobile", timeoutMs = 45000, maxRetries = 1, categories = ["performance"], fetchImpl } = {}) {
     this.apiKey = apiKey || process.env.PAGESPEED_API_KEY || "";
+    this.baseUrl = baseUrl || "";
     this.strategy = strategy;
     this.timeoutMs = timeoutMs;
     this.maxRetries = maxRetries;
@@ -128,7 +132,8 @@ export class PageSpeedClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const res = await this._fetch(`${ENDPOINT}?${params}`, { signal: controller.signal });
+      const endpoint = this.baseUrl || ENDPOINT;
+      const res = await this._fetch(`${endpoint}?${params}`, { signal: controller.signal });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         const err = new Error(`PageSpeed HTTP ${res.status}`);
