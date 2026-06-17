@@ -79,12 +79,22 @@ sobre a do `.env` naquela execução. Veja `.env.example` para o formato.
 
 ### Velocidade do enriquecimento (análise em massa)
 
-Cada análise do Lighthouse leva ~10–90s **no servidor do Google** — não dá para acelerar uma
-análise isolada. Por isso elas rodam **em paralelo**: o campo **Análises em paralelo** da
-interface (padrão **8**) controla quantos sites são medidos ao mesmo tempo. Com 8, medir 8 sites
-leva ~o tempo de 1. Ajuste pelo campo ou pela env `ENRICH_CONCURRENCY`. Valores muito altos
-(>15) podem esbarrar no limite de 240/min da API. Sites lentos têm timeout de 90s e viram `N/A`
-com o motivo no tooltip.
+O enriquecimento de CWV roda em **modo rápido** por padrão:
+
+1. **CrUX primeiro** — busca o dado de campo real (Chrome UX Report, ~300ms). Sites com
+   tráfego suficiente são pontuados na hora, sem rodar o Lighthouse.
+2. **Lighthouse enxuto** no fallback — para sites sem dado de campo, mede só a categoria
+   `performance` (bem mais rápido que as 4 categorias), com timeout de 45s.
+3. **Lighthouse completo sob demanda** — acessibilidade/SEO/boas-práticas + oportunidades são
+   geradas só quando você abre o **relatório** de um lead (ou liga a análise profunda).
+
+As medições rodam **em paralelo**: o campo **Análises em paralelo** (padrão **12**) controla
+quantos sites ao mesmo tempo (env `ENRICH_CONCURRENCY`). Valores muito altos (>15) podem
+esbarrar no limite de ~240/min da API.
+
+Marque **Análise profunda (mais lenta)** para rodar o Lighthouse completo (4 categorias) em
+todos os sites já no enriquecimento em massa — preenche as colunas de acessibilidade/SEO/boas
+práticas de uma vez, ao custo de mais tempo. A chave da PageSpeed também é usada para o CrUX.
 
 ## Relatório de auditoria (para apresentar ao lead)
 
@@ -102,6 +112,26 @@ enriquecido (dentro de `relatorios/`). Cada relatório é uma página pronta par
 `src/infrastructure/report/audit-template.html` e a narrativa em
 `src/application/buildAuditReportModel.js`. O botão final ("Ver a versão reconstruída") aponta
 para `REPORT_CTA_URL` (configurável no `.env`).
+
+## Engines de scraping (Playwright / CloakBrowser / Scrapling)
+
+Um seletor **Engine** na interface escolhe como a coleta e o enriquecimento acessam a web.
+Vale tanto para o scrape do Google Maps quanto para os fetches de sites de terceiros
+(e-mails, texto, health). Padrão: **Playwright** (comportamento de sempre).
+
+| Engine | Quando usar | Instalação |
+|--------|-------------|------------|
+| **Playwright** | Padrão. Já vem instalado. | nenhuma |
+| **CloakBrowser** | Anti-ban: Chromium stealth (passa Cloudflare Turnstile/FingerprintJS, `webdriver=false`). Drop-in do Playwright. | `npm install` já traz o pacote; o binário (~200MB) baixa sozinho em `~/.cloakbrowser/` no 1º uso. Licença do binário: uso livre, sem redistribuição. |
+| **Scrapling** | Fetch rápido/stealth de alto volume (impersonação de TLS, Camoufox, bypass de Cloudflare). Cobre a **camada de fetch**. | Requer o sidecar Python — ver `scrapling-sidecar/README.md` (Python ≥3.10, `pip install -r requirements.txt`, `scrapling install`). |
+
+**Modo Scrapling** (`fast` / `dynamic` / `stealth`) aparece ao escolher Scrapling:
+`fast` = HTTP + TLS; `dynamic` = browser (Playwright); `stealth` = Camoufox (resolve Cloudflare).
+
+**Limitação do Scrapling no Maps:** o Scrapling não abre um navegador ao vivo para o scroll
+interativo do Maps. Quando selecionado para uma busca normal, a **coleta** cai para o
+Playwright (com aviso na tela) e o **enriquecimento** usa o Scrapling normalmente. Para o
+fallback de e-mails em sites JS, o CloakBrowser é usado quando esse engine estiver selecionado.
 
 ## Windows × Linux (navegador)
 
