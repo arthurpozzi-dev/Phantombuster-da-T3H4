@@ -29,6 +29,7 @@ import { scrapeSiteTexts } from "../../application/scrapeSiteTexts.js";
 import { enrichEmails } from "../../application/enrichEmails.js";
 import { enrichSocials } from "../../application/enrichSocials.js";
 import { PageSpeedClient } from "../pagespeed/PageSpeedClient.js";
+import { buildEnrichClients } from "./enrichClients.js";
 import { toCSV } from "../export/csvExporter.js";
 import { toXLSX } from "../export/xlsxExporter.js";
 import { columnsFor } from "../export/columns.js";
@@ -59,13 +60,55 @@ function parseInputs(raw) {
     .filter(Boolean);
 }
 
+/**
+ * Extrai o centro (lat, lng) da busca por grade. Aceita:
+ *   - "lat,lng"  (ex.: "-22.0175,-47.8908")
+ *   - um link do Maps com "@lat,lng" (ex.: ".../@-22.01,-47.89,13z")
+ * @param {string} raw
+ * @returns {{lat:number,lng:number} | null}
+ */
+function parseCenter(raw) {
+  const str = (raw || "").toString().trim();
+  if (!str) return null;
+  const at = str.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (at) return { lat: parseFloat(at[1]), lng: parseFloat(at[2]) };
+  const pair = str.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (pair) return { lat: parseFloat(pair[1]), lng: parseFloat(pair[2]) };
+  return null;
+}
+
+/**
+ * Geocodifica um nome de cidade usando a API pública do Nominatim (OpenStreetMap).
+ * Sem chave de API; retorna {lat, lng} ou lança em caso de falha/não encontrado.
+ * @param {string} cityName
+ * @returns {Promise<{lat:number, lng:number}>}
+ */
+async function geocodeCity(cityName) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1`;
+  let data;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "MapsLeadsScraper/1.0 (contact@t3h4.studios)" },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (e) {
+    throw new Error(`Falha ao geocodificar "${cityName}": ${e.message}`);
+  }
+  if (!Array.isArray(data) || !data[0])
+    throw new Error(`Cidade não encontrada: "${cityName}". Tente incluir o estado ou país (ex.: "Campinas, SP, Brasil").`);
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+
 /** Soma de leads "com site" em todas as buscas. */
 const totalComSite = (buscas) => buscas.reduce((s, b) => s + b.comSite.length, 0);
 
 /**
  * Cria a aplicação Express.
  * @param {Object} deps
- * @param {import("../scraper/GoogleMapsScraper.js").GoogleMapsScraper} deps.scraper
+ * @param {import("../scraper/GoogleMapsScraper.js").GoogleMapsScraper} deps.scraper  coleta normal (navegador)
+ * @param {import("../scraper/GoogleMapsGridScraper.js").GoogleMapsGridScraper} [deps.gridScraper]  coleta por grade (sem limite de ~120)
  * @param {import("../scraper/SiteTextScraper.js").SiteTextScraper} deps.siteTextScraper
  * @param {import("../scraper/EmailScraper.js").EmailScraper} deps.emailScraper
  * @param {() => import("../scraper/BrowserEmailScraper.js").BrowserEmailScraper} [deps.makeBrowserEmailScraper] fábrica (1 instância por requisição)
@@ -76,7 +119,7 @@ const totalComSite = (buscas) => buscas.reduce((s, b) => s + b.comSite.length, 0
  * @param {import("../scraper/SocialSearchScraper.js").SocialSearchScraper} [deps.socialSearchScraper] descoberta de redes por busca web (opt-in)
  * @returns {import("express").Express}
  */
-export function createServer({ scraper, siteTextScraper, emailScraper, makeBrowserEmailScraper, makePdfRenderer, reportRenderer, exportBundle, siteHealthChecker, socialSearchScraper }) {
+export function createServer({ scraper, gridScraper, siteTextScraper, emailScraper, makeBrowserEmailScraper, makePdfRenderer, reportRenderer, exportBundle, siteHealthChecker, socialSearchScraper }) {
   const app = express();
   app.use(express.json());
   app.use(express.static(PUBLIC_DIR));
@@ -101,10 +144,44 @@ export function createServer({ scraper, siteTextScraper, emailScraper, makeBrows
     for (const k of Object.keys(filterOptions))
       if (!Number.isFinite(filterOptions[k])) delete filterOptions[k];
 
+    // Modo de busca: "normal" (navegador), "grid" (grade por coordenadas) ou "city" (grade por nome).
+    const mode = req.query.mode || "normal";
+    const isGrid = mode === "grid";
+    const isCity = mode === "city";
+    const isGrade = isGrid || isCity;
+    const areaSize = parseFloat(req.query.area) || 0.05;
+    const step = parseFloat(req.query.step) || 0.04;
+
     if (!inputs.length) {
       send("error", { message: "Informe ao menos um link ou termo de busca." });
       return res.end();
     }
+    if (isGrade && !gridScraper) {
+      send("error", { message: "Busca por grade indisponível no servidor." });
+      return res.end();
+    }
+    if (isGrid && !parseCenter(req.query.center)) {
+      send("error", { message: "No modo grade, informe o centro (lat,lng ou um link do Maps com @lat,lng)." });
+      return res.end();
+    }
+    if (isCity && !req.query.city?.trim()) {
+      send("error", { message: "No modo cidade, informe o nome da cidade." });
+      return res.end();
+    }
+
+    // Geocodifica o centro UMA vez para todas as buscas (no modo cidade).
+    let cityCenter = null;
+    if (isCity) {
+      try {
+        send("progress", { message: `Geocodificando "${req.query.city}"…` });
+        cityCenter = await geocodeCity(req.query.city.trim());
+        send("progress", { message: `Cidade encontrada: ${cityCenter.lat.toFixed(4)}, ${cityCenter.lng.toFixed(4)}` });
+      } catch (e) {
+        send("error", { message: e.message });
+        return res.end();
+      }
+    }
+    const gridCenter = isGrid ? parseCenter(req.query.center) : cityCenter;
 
     const buscas = [];
     try {
@@ -117,12 +194,10 @@ export function createServer({ scraper, siteTextScraper, emailScraper, makeBrows
           message: `Busca ${i + 1}/${inputs.length}: ${query}`,
         });
         try {
-          const raw = await scraper.scrape({
-            input: query,
-            maxResults,
-            deep,
-            onProgress: (p) => send("progress", { ...p, busca: i + 1, totalBuscas: inputs.length, query }),
-          });
+          const onProgress = (p) => send("progress", { ...p, busca: i + 1, totalBuscas: inputs.length, query });
+          const raw = isGrade
+            ? await gridScraper.scrape({ keyword: query, center: gridCenter, areaSize, step, maxResults, onProgress })
+            : await scraper.scrape({ input: query, maxResults, deep, onProgress });
           const { comSite, semSite, stats } = runPipeline(raw, filterOptions);
           buscas.push({ query, comSite, semSite, stats });
         } catch (e) {
@@ -157,9 +232,10 @@ export function createServer({ scraper, siteTextScraper, emailScraper, makeBrows
       return res.end();
     }
     const apiKey = (req.query.key || "").toString().trim();
-    const client = new PageSpeedClient({ apiKey });
+    const deep = req.query.deep === "1";
+    const { pageSpeed: client, crux } = buildEnrichClients({ apiKey, deep });
     const concurrency =
-      parseInt(req.query.conc, 10) || parseInt(process.env.ENRICH_CONCURRENCY, 10) || 8;
+      parseInt(req.query.conc, 10) || parseInt(process.env.ENRICH_CONCURRENCY, 10) || 12;
 
     const total = totalComSite(item.buscas);
     let done = 0;
@@ -175,7 +251,7 @@ export function createServer({ scraper, siteTextScraper, emailScraper, makeBrows
             if (p.erro) console.warn(`[enrich] ${p.status} "${p.nome}": ${p.erro}`);
             send("progress", { current: ++done, total, nome: p.nome, status: p.status, query: b.query });
           },
-          { concurrency, healthChecker: siteHealthChecker }
+          { concurrency, cruxClient: crux, deep }
         );
         b.comSite = r.leads;
         ok += r.ok;
