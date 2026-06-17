@@ -17,6 +17,7 @@
  */
 import { mergeSocialLinks, recordSocialSources } from "../domain/classification.js";
 import { runPool } from "./concurrentPool.js";
+import { cacheKey } from "./jobCache.js";
 
 const DEFAULT_CONCURRENCY = 6;
 const DEFAULT_BROWSER_CONCURRENCY = 2;
@@ -47,12 +48,18 @@ export async function enrichEmails(comSite = [], emailScraper, onProgress, optio
   // ---- Fase 1: scraping rápido (fetch) ----------------------------------
   const total = comSite.length;
   let done = 0;
+
+  // Wrapper que deduplica chamadas por domínio, se pageCache foi fornecido.
+  const pageCache = options.pageCache;
+  const scrapeContacts = (url) =>
+    pageCache ? pageCache.run(cacheKey(url), () => emailScraper.scrapeContacts(url)) : emailScraper.scrapeContacts(url);
+
   const leads = await runPool(comSite, {
     concurrency: options.concurrency || DEFAULT_CONCURRENCY,
     task: async (lead) => {
       try {
         // Mesmo download serve aos dois: e-mails e redes sociais (reuso interno).
-        const { emails, socials } = await emailScraper.scrapeContacts(lead.site);
+        const { emails, socials } = await scrapeContacts(lead.site);
         const merged = mergeEmails(lead.site_emails, emails);
         const antesRedes = lead.redes_sociais || "";
         const redes = mergeSocialLinks(antesRedes, socials);
