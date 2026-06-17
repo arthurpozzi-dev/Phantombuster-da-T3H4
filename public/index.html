@@ -177,6 +177,12 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
                 <input id="lighthouseUrl" type="url" placeholder="https://lighthouse.seudominio.com" autocomplete="off" />
               </div>
             </div>
+            <div id="lhInstancesWrap" class="row" style="margin-top: var(--s3); display: none;">
+              <div style="flex: 0 0 220px;">
+                <label for="lhInstances">Instâncias (workers em paralelo)<span class="help tip-start" tabindex="0" role="note" aria-label="Quantos workers Lighthouse o app sobe para esta análise. Mais instâncias = mais sites medidos ao mesmo tempo, até o limite de núcleos da máquina. Sobem sob demanda na primeira análise." data-tip="Quantos workers Lighthouse o app sobe. Mais = mais paralelismo, até o limite de núcleos. Sobem na primeira análise."></span></label>
+                <input id="lhInstances" type="number" min="1" max="8" value="2" />
+              </div>
+            </div>
           </div>
 
           <div class="toggle-grid" style="margin-top: var(--s4);">

@@ -25,6 +25,7 @@ function addLighthouse(params) {
   const source = document.querySelector('input[name="lhSource"]:checked')?.value || "google";
   params.set("lhSource", source);
   if (source === "custom") params.set("lighthouseUrl", $("lighthouseUrl").value.trim());
+  if (source === "system") params.set("lhInstances", parseInt($("lhInstances").value, 10) || 1);
   return params;
 }
 
@@ -740,41 +741,49 @@ function syncEngine() {
 $("engine").addEventListener("change", syncEngine);
 syncEngine();
 
-// Mostra o campo de URL só quando a fonte do Lighthouse é "Outro servidor".
+// Self-Hosted do Sistema: o app gerencia a frota (campo Instâncias) — habilitado
+// quando há instâncias externas (LIGHTHOUSE_SERVER_URL) OU frota gerenciável.
+let lhManaged = false;
+
+// Mostra o campo de URL (custom) ou de Instâncias (system gerenciado) conforme a fonte.
 function syncLhSource() {
-  const custom = document.querySelector('input[name="lhSource"]:checked')?.value === "custom";
-  $("lighthouseUrlWrap").style.display = custom ? "" : "none";
+  const source = document.querySelector('input[name="lhSource"]:checked')?.value;
+  $("lighthouseUrlWrap").style.display = source === "custom" ? "" : "none";
+  $("lhInstancesWrap").style.display = source === "system" && lhManaged ? "" : "none";
 }
 document.querySelectorAll('input[name="lhSource"]').forEach((r) =>
   r.addEventListener("change", syncLhSource)
 );
-syncLhSource();
 
-// "Self-Hosted do Sistema" só faz sentido se o servidor tiver LIGHTHOUSE_SERVER_URL.
-// Sem instâncias, desabilita a opção e avisa (cairia silenciosamente no Google).
 fetch("/api/config")
   .then((r) => r.json())
   .then((cfg) => {
     const sys = document.querySelector('input[name="lhSource"][value="system"]');
     const card = sys?.closest(".toggle-card");
     const desc = card?.querySelector(".t-desc");
-    const n = cfg.lighthouseInstances || 0;
-    if (n > 0) {
-      if (desc) desc.textContent = `Usa a(s) ${n} instância(s) Lighthouse configurada(s) no servidor.`;
-      return;
+    lhManaged = !!cfg.lighthouseManaged;
+    const max = cfg.lighthouseMaxInstances || 8;
+    const inst = $("lhInstances");
+    if (inst) {
+      inst.max = String(max);
+      if (parseInt(inst.value, 10) > max) inst.value = String(max);
     }
-    if (sys) sys.disabled = true;
-    card?.classList.add("is-disabled");
-    if (desc) desc.textContent = "Nenhuma instância no servidor (defina LIGHTHOUSE_SERVER_URL).";
-    if (sys?.checked) {
-      const google = document.querySelector('input[name="lhSource"][value="google"]');
-      if (google) {
-        google.checked = true;
-        syncLhSource();
+    if (cfg.lighthouseExternal > 0) {
+      if (desc) desc.textContent = `Usa ${cfg.lighthouseExternal} instância(s) externa(s) (LIGHTHOUSE_SERVER_URL).`;
+    } else if (lhManaged) {
+      if (desc) desc.textContent = `O app sobe a frota sob demanda (até ${max} instâncias).`;
+    } else {
+      if (sys) sys.disabled = true;
+      card?.classList.add("is-disabled");
+      if (desc) desc.textContent = "Lighthouse self-hosted indisponível neste servidor.";
+      if (sys?.checked) {
+        const google = document.querySelector('input[name="lhSource"][value="google"]');
+        if (google) google.checked = true;
       }
     }
+    syncLhSource();
   })
-  .catch(() => {});
+  .catch(() => syncLhSource());
 
 $("go").addEventListener("click", start);
 $("enrich").addEventListener("click", enrich);

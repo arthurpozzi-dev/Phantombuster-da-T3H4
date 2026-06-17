@@ -94,9 +94,18 @@ LIGHTHOUSE_SERVER_URL=http://localhost:3001
 Na UI (Opções avançadas → *Fonte da análise de laboratório*):
 
 - **PageSpeed do Google** — API pública (padrão).
-- **Self-Hosted do Sistema** — usa `LIGHTHOUSE_SERVER_URL` (esta frota). Fica
-  desabilitada se o servidor não tiver a env definida.
+- **Self-Hosted do Sistema** — frota self-hosted. Dois modos:
+  - **Gerenciada (padrão)**: com `LIGHTHOUSE_SERVER_URL` vazio, o **app sobe a
+    frota sozinho**, sob demanda, e a quantidade é escolhida no campo
+    *Instâncias* (1..núcleos). Você não precisa rodar `npm run lighthouse` à mão —
+    é a forma recomendada. Os workers herdam as `LH_*` do `.env`.
+  - **Externa**: com `LIGHTHOUSE_SERVER_URL` preenchido, usa essas URLs (workers
+    em outras máquinas/containers); o campo *Instâncias* some.
 - **Outro servidor** — cola uma URL avulsa (ou várias, vírgula) só naquela análise.
+
+> Os comandos `npm run lighthouse` / `lighthouse:fleet` continuam úteis para rodar
+> workers manualmente (ex.: em outra máquina, atrás do nginx). Para o uso local
+> comum, prefira a frota **gerenciada** acima.
 
 ## Variáveis de ambiente
 

@@ -16,7 +16,10 @@ import { AuditReportRenderer } from "./infrastructure/report/AuditReportRenderer
 import { PdfRenderer } from "./infrastructure/report/PdfRenderer.js";
 import { ExportBundle } from "./infrastructure/export/ExportBundle.js";
 import { createEngineRegistry } from "./infrastructure/engine/registry.js";
+import { LighthouseFleet } from "./infrastructure/lighthouse/LighthouseFleet.js";
 import { createServer } from "./infrastructure/http/server.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Carrega .env (PAGESPEED_API_KEY, PORT) usando o recurso nativo do Node 22+.
 try {
@@ -44,6 +47,12 @@ const reportRenderer = new AuditReportRenderer();
 const exportBundle = new ExportBundle({ reportRenderer });
 // Fábrica: 1 navegador de PDF por requisição de exportação (isolamento entre reqs).
 const makePdfRenderer = () => new PdfRenderer({ headless: true });
+// Frota Lighthouse gerenciada pelo app (sobe N workers sob demanda; o front
+// escolhe N). Os workers herdam o env (LH_CHROME_PATH, LH_USER_DATA_DIR, etc.).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const lighthouseFleet = new LighthouseFleet({
+  serverScript: path.join(__dirname, "..", "lighthouse-server", "server.js"),
+});
 const app = createServer({
   scraper,
   gridScraper,
@@ -56,6 +65,7 @@ const app = createServer({
   siteHealthChecker,
   socialSearchScraper,
   engines,
+  lighthouseFleet,
 });
 
 app.listen(PORT, () => {
@@ -65,6 +75,7 @@ app.listen(PORT, () => {
 // Encerra engines (mata o sidecar Scrapling, fecha browsers) ao desligar.
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, async () => {
+    lighthouseFleet.closeAll();
     await engines.closeAll();
     process.exit(0);
   });

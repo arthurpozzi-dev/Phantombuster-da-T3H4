@@ -123,22 +123,37 @@ const totalComSite = (buscas) => buscas.reduce((s, b) => s + b.comSite.length, 0
  * @param {import("../scraper/SocialSearchScraper.js").SocialSearchScraper} [deps.socialSearchScraper] descoberta de redes por busca web (opt-in)
  * @returns {import("express").Express}
  */
+/** Instâncias externas configuradas via env (LIGHTHOUSE_SERVER_URL), separadas por vírgula. */
+function externalLighthouseUrls() {
+  return (process.env.LIGHTHOUSE_SERVER_URL || "")
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+}
+
 /**
- * Resolve a URL da instância Lighthouse a partir da escolha da UI (`lhSource`):
- *  - "google" -> "" (força o PageSpeed do Google, sem cair na env do sistema)
- *  - "system" -> a instância self-hosted configurada no servidor (LIGHTHOUSE_SERVER_URL)
+ * Resolve a URL (ou lista, vírgula) da análise Lighthouse a partir da escolha da
+ * UI (`lhSource`). Pode subir a frota gerenciada, por isso é assíncrona.
+ *  - "google" -> "" (força o PageSpeed do Google)
  *  - "custom" -> a URL informada no campo da interface (lighthouseUrl)
- * Sem `lhSource` (chamadas legadas): usa o lighthouseUrl da query, com fallback para a env.
+ *  - "system" -> instâncias externas da env, se houver; senão a FROTA GERENCIADA:
+ *               sobe N workers (lhInstances do front) e devolve as URLs deles.
+ * Sem `lhSource` (chamadas legadas): lighthouseUrl da query, com fallback para a env.
  */
-function resolveLighthouseUrl(req) {
+async function resolveLighthouse(req, fleet) {
   const source = (req.query.lhSource || "").toString().trim();
   if (source === "google") return "";
-  if (source === "system") return (process.env.LIGHTHOUSE_SERVER_URL || "").trim();
   if (source === "custom") return (req.query.lighthouseUrl || "").toString().trim();
+  if (source === "system") {
+    const external = externalLighthouseUrls();
+    if (external.length) return external.join(","); // frota externa tem precedência
+    if (fleet) return (await fleet.ensure(req.query.lhInstances)).join(",");
+    return "";
+  }
   return (req.query.lighthouseUrl || process.env.LIGHTHOUSE_SERVER_URL || "").toString().trim();
 }
 
-export function createServer({ scraper, gridScraper, siteTextScraper, emailScraper, makeBrowserEmailScraper, makePdfRenderer, reportRenderer, exportBundle, siteHealthChecker, socialSearchScraper, engines }) {
+export function createServer({ scraper, gridScraper, siteTextScraper, emailScraper, makeBrowserEmailScraper, makePdfRenderer, reportRenderer, exportBundle, siteHealthChecker, socialSearchScraper, engines, lighthouseFleet }) {
   /** Resolve o engine de scraping a partir dos parâmetros da requisição. */
   const resolveEngine = (req) =>
     engines
@@ -158,13 +173,14 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
 
   // ---- Config da UI (capacidades do servidor) ---------------------------
   app.get("/api/config", (_req, res) => {
+    const external = externalLighthouseUrls().length;
     res.json({
-      // Quantas instâncias Lighthouse self-hosted o servidor conhece (env), p/ o
-      // front habilitar/avisar a opção "Self-Hosted do Sistema".
-      lighthouseInstances: (process.env.LIGHTHOUSE_SERVER_URL || "")
-        .split(",")
-        .map((u) => u.trim())
-        .filter(Boolean).length,
+      // Instâncias externas fixas (LIGHTHOUSE_SERVER_URL). Quando > 0, têm precedência.
+      lighthouseExternal: external,
+      // App sobe a frota sob demanda (só quando não há instâncias externas).
+      lighthouseManaged: external === 0 && !!lighthouseFleet,
+      // Teto de instâncias que o front pode pedir na frota gerenciada.
+      lighthouseMaxInstances: lighthouseFleet?.maxInstances || 0,
     });
   });
 
@@ -282,7 +298,13 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
       return res.end();
     }
     const apiKey = (req.query.key || "").toString().trim();
-    const lighthouseUrl = resolveLighthouseUrl(req);
+    let lighthouseUrl;
+    try {
+      lighthouseUrl = await resolveLighthouse(req, lighthouseFleet);
+    } catch (e) {
+      send("error", { message: "Não foi possível subir a frota Lighthouse: " + (e?.message || "falha") + "." });
+      return res.end();
+    }
     if ((req.query.lhSource || "").toString().trim() === "custom" && !lighthouseUrl) {
       send("error", { message: "Informe a URL da instância Lighthouse (ou troque a fonte da análise)." });
       return res.end();
@@ -495,7 +517,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
         return res.status(409).send("Enriqueça os sites (Core Web Vitals) antes de gerar o relatório.");
       try {
         const apiKey = (req.query.key || "").toString().trim();
-        const lighthouseUrl = resolveLighthouseUrl(req);
+        const lighthouseUrl = await resolveLighthouse(req, lighthouseFleet);
         if ((req.query.lhSource || "").toString().trim() === "custom" && !lighthouseUrl) {
           return res.status(400).send("Informe a URL da instância Lighthouse (ou troque a fonte da análise).");
         }
