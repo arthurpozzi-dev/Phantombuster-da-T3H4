@@ -19,11 +19,56 @@
 
     <!-- Busca + opções -->
     <div class="card">
-      <label for="input">Links do Google Maps ou termos de busca — um por linha</label>
+      <label id="inputLabel" for="input">Links do Google Maps ou termos de busca — um por linha</label>
       <textarea id="input" rows="3"
         placeholder="restaurantes em São Carlos
 dentistas em Ribeirão Preto
 https://www.google.com/maps/search/petshops+em+campinas"></textarea>
+
+      <!-- Modo de busca -->
+      <div class="row">
+        <div style="flex: 1 1 360px;">
+          <label for="mode">Modo de busca</label>
+          <select id="mode">
+            <option value="normal">Normal (navegador) — links ou termos, até ~120 por busca</option>
+            <option value="grid">Grade — coordenadas (lat,lng) — sem limite de ~120</option>
+            <option value="city">Grade — cidade por nome — sem limite de ~120</option>
+          </select>
+        </div>
+        <div id="gridHint" class="sub" style="flex: 2 1 320px; align-self:flex-end; margin:0; display:none;"></div>
+      </div>
+
+      <!-- Opções do modo grade por coordenadas -->
+      <div class="row" id="gridOpts" style="display:none;">
+        <div style="flex: 2 1 320px;">
+          <label for="center">Localização — lat,lng ou link do Maps com @lat,lng</label>
+          <input id="center" type="text" placeholder="-22.0175,-47.8908   ou   https://maps.google.com/@-22.01,-47.89,13z" />
+        </div>
+        <div style="flex: 0 0 130px;">
+          <label for="area" title="Raio em graus. 0.05° ≈ 5,5 km.">Raio (graus)</label>
+          <input id="area" type="number" min="0.01" step="0.01" value="0.05" />
+        </div>
+        <div style="flex: 0 0 130px;">
+          <label for="step" title="Passo da grade. 0.04° ≈ 4 km. Menor = mais cobertura, mais lento.">Passo (graus)</label>
+          <input id="step" type="number" min="0.01" step="0.01" value="0.04" />
+        </div>
+      </div>
+
+      <!-- Opções do modo grade por cidade -->
+      <div class="row" id="cityOpts" style="display:none;">
+        <div style="flex: 2 1 320px;">
+          <label for="cityName">Nome da cidade (geocodificado automaticamente)</label>
+          <input id="cityName" type="text" placeholder="São Paulo, SP   ou   Ribeirão Preto   ou   Campinas, Brasil" />
+        </div>
+        <div style="flex: 0 0 130px;">
+          <label for="cityArea" title="Raio em graus. 0.05° ≈ 5,5 km.">Raio (graus)</label>
+          <input id="cityArea" type="number" min="0.01" step="0.01" value="0.05" />
+        </div>
+        <div style="flex: 0 0 130px;">
+          <label for="cityStep" title="Passo da grade. 0.04° ≈ 4 km.">Passo (graus)</label>
+          <input id="cityStep" type="number" min="0.01" step="0.01" value="0.04" />
+        </div>
+      </div>
 
       <div class="row">
         <div>
@@ -51,7 +96,11 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
         </div>
         <div style="flex: 0 0 130px;">
           <label for="conc">Análises em paralelo</label>
-          <input id="conc" type="number" min="1" max="20" value="8" />
+          <input id="conc" type="number" min="1" max="20" value="12" />
+        </div>
+        <div style="flex: 0 0 auto;">
+          <label title="Por padrão usa dados de campo (CrUX, rápido) e Lighthouse só de performance. Marque para rodar o Lighthouse completo (acessibilidade, SEO, boas práticas) em todos — bem mais lento.">Análise CWV</label>
+          <span class="check"><input id="deepCwv" type="checkbox" /> Análise profunda (mais lenta)</span>
         </div>
         <div style="flex: 0 0 auto;">
           <label>Coleta detalhada</label>

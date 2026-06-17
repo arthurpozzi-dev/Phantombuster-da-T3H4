@@ -285,7 +285,20 @@ function setupBuscaPicker() {
 // ---- Busca + pipeline (N buscas) -----------------------------------------
 function start() {
   const input = $("input").value.trim();
-  if (!input) return setStatus("Informe ao menos um link ou termo de busca.");
+  const mode = $("mode").value;
+  const isGrade = mode === "grid" || mode === "city";
+
+  if (!input) return setStatus("Informe ao menos um termo de busca.");
+
+  // Em modos grade, a textarea é só para palavras-chave — rejeita URLs do Maps.
+  if (isGrade && /^https?:\/\//im.test(input))
+    return setStatus("No modo grade, a caixa de texto aceita apenas palavras-chave (ex.: \"restaurantes\"). Coloque links do Maps no campo de localização abaixo.");
+
+  if (mode === "grid" && !$("center").value.trim())
+    return setStatus("Informe a localização (lat,lng ou link do Maps com @lat,lng).");
+  if (mode === "city" && !$("cityName").value.trim())
+    return setStatus("Informe o nome da cidade.");
+
   if (scrapeES) scrapeES.close();
 
   $("go").disabled = true;
@@ -295,12 +308,22 @@ function start() {
 
   const params = new URLSearchParams({
     input,
+    mode,
     max: parseInt($("max").value, 10) || 0,
     deep: $("deep").checked ? "1" : "0",
     minAval: $("minAval").value,
     maxAval: $("maxAval").value,
     notaMin: $("notaMin").value,
   });
+  if (mode === "grid") {
+    params.set("center", $("center").value.trim());
+    params.set("area", $("area").value || "0.05");
+    params.set("step", $("step").value || "0.04");
+  } else if (mode === "city") {
+    params.set("city", $("cityName").value.trim());
+    params.set("area", $("cityArea").value || "0.05");
+    params.set("step", $("cityStep").value || "0.04");
+  }
   scrapeES = new EventSource(`/api/scrape?${params}`);
 
   scrapeES.addEventListener("progress", (e) => {
@@ -386,12 +409,14 @@ function runJob(url, { startMsg, progressMsg, doneMsg }) {
 }
 
 function enrich() {
+  const deep = $("deepCwv").checked;
   const params = new URLSearchParams({
     key: $("key").value.trim(),
-    conc: parseInt($("conc").value, 10) || 8,
+    conc: parseInt($("conc").value, 10) || 12,
   });
+  if (deep) params.set("deep", "1");
   runJob(`/api/enrich/${state.id}?${params}`, {
-    startMsg: "Analisando sites no PageSpeed...",
+    startMsg: deep ? "Analisando sites (Lighthouse completo)..." : "Analisando sites (modo rápido: CrUX + performance)...",
     progressMsg: (p) => `${p.status === "FORA DO AR" ? "Fora do ar" : "PageSpeed"} ${p.current}/${p.total}: ${p.nome}`,
     doneMsg: (d) => {
       const partes = [`${d.ok} sites medidos`];
@@ -646,6 +671,33 @@ function setupExportModal() {
     if (e.target === $("exportModal")) closeExportModal();
   });
 }
+
+// Modo de busca: mostra/esconde campos conforme a opção.
+// No modo grade o "coleta detalhada" não se aplica (o endpoint JSON já traz os dados).
+// Na textarea: modo normal aceita links ou termos; modos grade aceitam APENAS termos
+// (a localização entra pelo campo dedicado, não pela textarea).
+const GRID_PLACEHOLDER = "restaurantes\ndentistas\nacademia de ginástica";
+const NORMAL_PLACEHOLDER = "restaurantes em São Carlos\ndentistas em Ribeirão Preto\nhttps://www.google.com/maps/search/petshops+em+campinas";
+
+function syncMode() {
+  const mode = $("mode").value;
+  const isGrid = mode === "grid";
+  const isCity = mode === "city";
+  const isGrade = isGrid || isCity;
+
+  $("gridOpts").style.display = isGrid ? "flex" : "none";
+  $("cityOpts").style.display = isCity ? "flex" : "none";
+  $("gridHint").style.display = "none";
+  $("deep").disabled = isGrade;
+
+  // Textarea: em modos grade só aceita palavras-chave, não URLs.
+  $("inputLabel").textContent = isGrade
+    ? "Termos de busca — um por linha (sem links; a localização fica abaixo)"
+    : "Links do Google Maps ou termos de busca — um por linha";
+  $("input").placeholder = isGrade ? GRID_PLACEHOLDER : NORMAL_PLACEHOLDER;
+}
+$("mode").addEventListener("change", syncMode);
+syncMode();
 
 $("go").addEventListener("click", start);
 $("enrich").addEventListener("click", enrich);
