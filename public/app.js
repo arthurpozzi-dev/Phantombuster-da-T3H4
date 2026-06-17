@@ -9,6 +9,14 @@
  */
 const $ = (id) => document.getElementById(id);
 
+/** Anexa o engine escolhido (e o modo Scrapling) aos params de uma requisição. */
+function addEngine(params) {
+  const engine = $("engine")?.value || "playwright";
+  params.set("engine", engine);
+  if (engine === "scrapling") params.set("scraplingMode", $("scraplingMode")?.value || "fast");
+  return params;
+}
+
 // Colunas exibidas em cada tabela: [chave, rótulo, tipoOpcional].
 const COLS_COM = [
   ["nome", "Nome"], ["categoria", "Categoria"], ["nota", "Nota"],
@@ -324,6 +332,7 @@ function start() {
     params.set("area", $("cityArea").value || "0.05");
     params.set("step", $("cityStep").value || "0.04");
   }
+  addEngine(params);
   scrapeES = new EventSource(`/api/scrape?${params}`);
 
   scrapeES.addEventListener("progress", (e) => {
@@ -415,6 +424,7 @@ function enrich() {
     conc: parseInt($("conc").value, 10) || 12,
   });
   if (deep) params.set("deep", "1");
+  addEngine(params);
   runJob(`/api/enrich/${state.id}?${params}`, {
     startMsg: deep ? "Analisando sites (Lighthouse completo)..." : "Analisando sites (modo rápido: CrUX + performance)...",
     progressMsg: (p) => `${p.status === "FORA DO AR" ? "Fora do ar" : "PageSpeed"} ${p.current}/${p.total}: ${p.nome}`,
@@ -429,6 +439,7 @@ function enrich() {
 
 function sitetext() {
   const params = new URLSearchParams({ conc: parseInt($("conc").value, 10) || 8 });
+  addEngine(params);
   runJob(`/api/sitetext/${state.id}?${params}`, {
     startMsg: "Puxando o texto dos sites...",
     progressMsg: (p) => `Texto ${p.current}/${p.total}: ${p.nome}`,
@@ -443,6 +454,7 @@ function emailScrape() {
   const params = new URLSearchParams({ conc: parseInt($("conc").value, 10) || 6 });
   // Fallback com navegador (sites JS): roda só nos leads que ficarem sem e-mail.
   if (!$("renderJs").checked) params.set("render", "0");
+  addEngine(params);
   runJob(`/api/emails/${state.id}?${params}`, {
     startMsg: "Buscando e-mails (home + páginas de contato)...",
     progressMsg: (p) => {
@@ -464,6 +476,7 @@ function socialScrape() {
   // Fallback com navegador (sites JS) e busca web (descoberta) — opcionais.
   if (!$("renderJs").checked) params.set("render", "0");
   if ($("searchSocials").checked) params.set("search", "1");
+  addEngine(params);
   runJob(`/api/socials/${state.id}?${params}`, {
     startMsg: "Procurando redes sociais (site + páginas de contato)...",
     progressMsg: (p) => {
@@ -698,6 +711,13 @@ function syncMode() {
 }
 $("mode").addEventListener("change", syncMode);
 syncMode();
+
+// Mostra o modo Scrapling só quando o engine Scrapling está selecionado.
+function syncEngine() {
+  $("scraplingModeWrap").style.display = $("engine").value === "scrapling" ? "" : "none";
+}
+$("engine").addEventListener("change", syncEngine);
+syncEngine();
 
 $("go").addEventListener("click", start);
 $("enrich").addEventListener("click", enrich);

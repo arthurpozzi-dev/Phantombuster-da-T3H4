@@ -38,6 +38,29 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
         <div id="gridHint" class="sub" style="flex: 2 1 320px; align-self:flex-end; margin:0; display:none;"></div>
       </div>
 
+      <!-- Engine de scraping (vale para a coleta e o enriquecimento) -->
+      <div class="row" style="display:flex; gap:12px; flex-wrap:wrap;">
+        <div style="flex: 1 1 280px;">
+          <label for="engine">Engine</label>
+          <select id="engine">
+            <option value="playwright">Playwright (padrão)</option>
+            <option value="cloakbrowser">CloakBrowser (anti-ban / Cloudflare)</option>
+            <option value="scrapling">Scrapling (rápido / stealth)</option>
+          </select>
+        </div>
+        <div id="scraplingModeWrap" style="flex: 0 0 220px; display:none;">
+          <label for="scraplingMode">Modo Scrapling</label>
+          <select id="scraplingMode">
+            <option value="fast">fast (HTTP/TLS)</option>
+            <option value="dynamic">dynamic (browser)</option>
+            <option value="stealth">stealth (Camoufox)</option>
+          </select>
+        </div>
+        <div class="sub" style="flex: 2 1 320px; align-self:flex-end; margin:0;">
+          CloakBrowser e Scrapling exigem instalação (ver README). Scrapling não faz o scroll do Maps — nesse caso a coleta usa Playwright e o Scrapling vale no enriquecimento.
+        </div>
+      </div>
+
       <!-- Opções do modo grade por coordenadas -->
       <div class="row" id="gridOpts" style="display:none;">
         <div style="flex: 2 1 320px;">
