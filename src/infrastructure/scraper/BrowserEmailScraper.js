@@ -15,8 +15,7 @@
  * fechado com `close()` ao fim do lote. Uma instância por requisição evita que
  * o fechamento de uma derrube outra.
  */
-import { chromium } from "playwright";
-import { buildLaunchOptions } from "./GoogleMapsScraper.js";
+import { PlaywrightEngine } from "../engine/PlaywrightEngine.js";
 import { extractEmails, extractSocials } from "./SiteTextScraper.js";
 import { findContactLinks } from "./EmailScraper.js";
 
@@ -33,21 +32,27 @@ export class BrowserEmailScraper {
    * @param {number} [options.settleMs=1800]   espera após o load, para o JS renderizar
    * @param {number} [options.maxPages=3]       máx. de páginas de contato além da home
    */
-  constructor({ headless = true, timeoutMs = 25000, settleMs = 1800, maxPages = 3 } = {}) {
+  constructor({ headless = true, timeoutMs = 25000, settleMs = 1800, maxPages = 3, engine } = {}) {
     this.headless = headless;
     this.timeoutMs = timeoutMs;
     this.settleMs = settleMs;
     this.maxPages = maxPages;
+    this.engine = engine || new PlaywrightEngine();
     this.browser = null;
     this.launching = null;
   }
 
-  /** Sobe o Chromium uma única vez (seguro sob concorrência). */
+  /** Sobe o navegador uma única vez via engine (seguro sob concorrência). */
   async #launch() {
     if (this.browser) return this.browser;
-    if (!this.launching) this.launching = chromium.launch(buildLaunchOptions(this.headless));
+    if (!this.launching) this.launching = this.engine.launchBrowser({ headless: this.headless });
     this.browser = await this.launching;
     return this.browser;
+  }
+
+  /** @internal gancho para teste do singleton de launch. */
+  async _launchForTest() {
+    return this.#launch();
   }
 
   /** Fecha o navegador, se estiver aberto. Idempotente. */
