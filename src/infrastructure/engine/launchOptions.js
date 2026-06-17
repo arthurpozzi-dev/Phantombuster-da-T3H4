@@ -56,7 +56,7 @@ function ensureLocalLibSonames() {
 }
 
 /** Env do navegador com as libs locais no LD_LIBRARY_PATH, se existirem; senão undefined. */
-function browserEnv() {
+export function browserEnv() {
   if (process.platform === "win32" || !existsSync(LOCAL_CHROMIUM_LIBS)) return undefined;
   ensureLocalLibSonames();
   const prev = process.env.LD_LIBRARY_PATH || "";

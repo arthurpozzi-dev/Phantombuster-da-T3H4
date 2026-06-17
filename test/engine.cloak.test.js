@@ -14,7 +14,8 @@ test("cloak engine launchBrowser delegates to cloak launch with stealth args", a
   assert.equal(e.name, "cloakbrowser");
   assert.equal(e.supportsBrowser, true);
   const b = await e.launchBrowser({ headless: true });
-  assert.deepEqual(called, { headless: true, args: ARGS });
+  assert.equal(called.headless, true);
+  assert.deepEqual(called.args, ARGS); // env pode ou não estar presente (depende do ambiente)
   await b.close();
 });
 

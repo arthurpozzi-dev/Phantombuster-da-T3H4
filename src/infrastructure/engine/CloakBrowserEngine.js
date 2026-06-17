@@ -10,7 +10,15 @@
  *
  * O import de "cloakbrowser" é LAZY — só acontece quando este engine é usado,
  * evitando o custo/download quando o usuário fica no Playwright.
+ *
+ * O binário do CloakBrowser fica em ~/.cloakbrowser/ e precisa das mesmas libs
+ * de sistema do Chromium (libnss3, libnspr4, libasound2…). Em ambientes sem essas
+ * libs instaladas via apt, reaproveitamos a pasta `.chromium-libs/` do projeto
+ * (mesmo mecanismo do Playwright) pondo-a no LD_LIBRARY_PATH do processo — o
+ * Chromium filho herda. Sem a pasta, é no-op.
  */
+import { browserEnv } from "./launchOptions.js";
+
 const CLOAK_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 
 export class CloakBrowserEngine {
@@ -29,14 +37,22 @@ export class CloakBrowserEngine {
     return this._launch;
   }
 
+  /** Opções de launch: args stealth + libs locais (se houver). Também garante o
+   * LD_LIBRARY_PATH no processo, pois o cloak pode não repassar `env`. */
+  _launchOpts(headless) {
+    const env = browserEnv();
+    if (env?.LD_LIBRARY_PATH) process.env.LD_LIBRARY_PATH = env.LD_LIBRARY_PATH;
+    return { headless, args: CLOAK_ARGS, ...(env ? { env } : {}) };
+  }
+
   async launchBrowser({ headless = true } = {}) {
     const launch = await this._resolveLaunch();
-    return launch({ headless, args: CLOAK_ARGS });
+    return launch(this._launchOpts(headless));
   }
 
   async fetchHtml(url, { timeoutMs = 25000 } = {}) {
     const launch = await this._resolveLaunch();
-    if (!this._fetchBrowser) this._fetchBrowser = await launch({ headless: true, args: CLOAK_ARGS });
+    if (!this._fetchBrowser) this._fetchBrowser = await launch(this._launchOpts(true));
     const page = await this._fetchBrowser.newPage();
     try {
       const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
