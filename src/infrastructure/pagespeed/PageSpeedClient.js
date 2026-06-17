@@ -15,7 +15,8 @@
  */
 
 const ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
-const CATEGORIES = ["performance", "accessibility", "best-practices", "seo"];
+/** Todas as categorias do Lighthouse (usadas no modo "análise profunda"/relatório). */
+export const ALL_CATEGORIES = ["performance", "accessibility", "best-practices", "seo"];
 
 /** Garante que a URL tenha protocolo (a API exige URL absoluta). */
 function normalizeUrl(url) {
@@ -104,26 +105,30 @@ export class PageSpeedClient {
    * @param {Object} [options]
    * @param {string} [options.apiKey]   chave da API (sobrepõe a env)
    * @param {"mobile"|"desktop"} [options.strategy="mobile"]
-   * @param {number} [options.timeoutMs=90000]   timeout por tentativa
+   * @param {number} [options.timeoutMs=45000]   timeout por tentativa
    * @param {number} [options.maxRetries=1]       tentativas extras em falha transitória
+   * @param {string[]} [options.categories=["performance"]]  categorias do Lighthouse a pedir
+   * @param {typeof fetch} [options.fetchImpl]   injeção para testes
    */
-  constructor({ apiKey, strategy = "mobile", timeoutMs = 90000, maxRetries = 1 } = {}) {
+  constructor({ apiKey, strategy = "mobile", timeoutMs = 45000, maxRetries = 1, categories = ["performance"], fetchImpl } = {}) {
     this.apiKey = apiKey || process.env.PAGESPEED_API_KEY || "";
     this.strategy = strategy;
     this.timeoutMs = timeoutMs;
     this.maxRetries = maxRetries;
+    this.categories = categories;
+    this._fetch = fetchImpl || globalThis.fetch;
   }
 
   /** Uma única tentativa de medição. */
   async _attempt(url) {
     const params = new URLSearchParams({ url, strategy: this.strategy });
-    for (const c of CATEGORIES) params.append("category", c);
+    for (const c of this.categories) params.append("category", c);
     if (this.apiKey) params.set("key", this.apiKey);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const res = await fetch(`${ENDPOINT}?${params}`, { signal: controller.signal });
+      const res = await this._fetch(`${ENDPOINT}?${params}`, { signal: controller.signal });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         const err = new Error(`PageSpeed HTTP ${res.status}`);
