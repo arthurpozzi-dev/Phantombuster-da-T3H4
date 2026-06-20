@@ -128,7 +128,7 @@ node src/main.js          # deve logar "rodando em: http://localhost:3000"
 # como SITE_USER
 npm install -g pm2        # ou: npx pm2 ...
 cd ~/htdocs/<dominio>
-pm2 start npm --name maps-leads -- start    # roda "npm start" => node src/main.js
+pm2 start ecosystem.config.cjs    # config versionada (autorestart + max_memory_restart 2G)
 pm2 save
 
 # Persistir no boot (rode o comando que o PM2 imprimir; precisa de sudo uma vez):
