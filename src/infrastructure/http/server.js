@@ -165,8 +165,28 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
   app.use(express.static(PUBLIC_DIR));
 
   const store = new Map();
+  // TTL de jobs OCIOSOS (sem nenhuma fase em andamento). Configurável via env.
+  const RESULT_TTL_MS = (parseInt(process.env.RESULT_TTL_MIN, 10) || 60) * 60_000;
   /** Cache/dedup do job (criado sob demanda; some com o job). */
   const cacheFor = (item) => (item.cache ||= createJobCache());
+  /**
+   * Marca um job como EM USO enquanto uma fase o processa, renovando o relógio do
+   * TTL. Sem isso, uma fase longa (ex.: scraping de e-mail de milhares de leads,
+   * que passa de 1h) era varrida pelo coletor NO MEIO do caminho, e a requisição
+   * seguinte via "Resultado expirado". Pareie SEMPRE com `releaseJob` no finally.
+   */
+  const holdJob = (item) => {
+    item.active = (item.active || 0) + 1;
+    item.ts = Date.now();
+  };
+  const releaseJob = (item) => {
+    if (item.active) item.active--;
+    item.ts = Date.now(); // reinicia o TTL de ociosidade a partir do fim da fase
+  };
+  // Timeout por requisição HTTP do scraper de e-mail. Default subiu de 10s → 20s:
+  // muitos sites de negócio (hospedagem lenta, home pesada) não respondiam em 10s
+  // e caíam como falha, empurrando o lead para as fases caras (engine/navegador).
+  const EMAIL_TIMEOUT_MS = parseInt(process.env.EMAIL_TIMEOUT_MS, 10) || 20000;
   /**
    * Cache de CWV PERSISTENTE entre jobs (por domínio + modo), com TTL. Reanalisar
    * o mesmo domínio em re-runs/buscas repetidas é o desperdício mais caro do
@@ -177,7 +197,10 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
   });
   setInterval(() => {
     const now = Date.now();
-    for (const [id, v] of store) if (now - v.ts > 3600_000) store.delete(id);
+    // Só evicta jobs OCIOSOS: um job com fase em andamento (active>0) nunca é
+    // varrido no meio, por mais longa que a fase seja.
+    for (const [id, v] of store) if (!v.active && now - v.ts > RESULT_TTL_MS) store.delete(id);
+    cwvStore.sweep(); // evicta entradas de CWV expiradas (domínios nunca relidos)
   }, 600_000).unref();
 
   // ---- Config da UI (capacidades do servidor) ---------------------------
@@ -346,6 +369,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     let ok = 0;
     let falhas = 0;
     let foraDoAr = 0;
+    holdJob(item);
     try {
       for (const b of item.buscas) {
         const r = await enrichLeads(
@@ -362,11 +386,11 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
         falhas += r.falhas;
         foraDoAr += r.foraDoAr;
       }
-      item.ts = Date.now();
       send("done", { ok, falhas, foraDoAr, comSitePerBusca: item.buscas.map((b) => b.comSite) });
     } catch (err) {
       send("error", { message: err.message || "Falha no enriquecimento." });
     } finally {
+      releaseJob(item);
       res.end();
     }
   });
@@ -388,6 +412,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     let done = 0;
     let ok = 0;
     let falhas = 0;
+    holdJob(item);
     try {
       for (const b of item.buscas) {
         const r = await scrapeSiteTexts(
@@ -400,11 +425,11 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
         ok += r.ok;
         falhas += r.falhas;
       }
-      item.ts = Date.now();
       send("done", { ok, falhas, comSitePerBusca: item.buscas.map((b) => b.comSite) });
     } catch (err) {
       send("error", { message: err.message || "Falha ao puxar o texto dos sites." });
     } finally {
+      releaseJob(item);
       res.end();
     }
   });
@@ -427,7 +452,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     //  3) navegador: fallback para sites JS (Fase 2 abaixo).
     const es = emailScraper;
     const engineScraper =
-      engine.name !== "playwright" ? new EmailScraper({ engine, engineMode: "fast" }) : null;
+      engine.name !== "playwright" ? new EmailScraper({ engine, engineMode: "fast", timeoutMs: EMAIL_TIMEOUT_MS }) : null;
     const engineConcurrency =
       parseInt(req.query.econc, 10) || parseInt(process.env.EMAIL_ENGINE_CONCURRENCY, 10) || 4;
     // Fallback com navegador (sites JS): ligado por padrão, desligável com render=0.
@@ -449,6 +474,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     // Progresso por fase: cada fase reporta seu próprio current/total (a barra reinicia).
     const sendProgress = (p, query) =>
       send("progress", { fase: p.fase, current: p.current, total: p.total, nome: p.nome, encontrados: p.encontrados, query });
+    holdJob(item);
     try {
       for (const b of item.buscas) {
         const r = await enrichEmails(
@@ -467,11 +493,11 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
         renderizados += r.renderizados;
         antiBan += r.antiBan;
       }
-      item.ts = Date.now();
       send("done", { ok, semEmail, falhas, renderizados, antiBan, comSitePerBusca: item.buscas.map((b) => b.comSite) });
     } catch (err) {
       send("error", { message: err.message || "Falha ao buscar e-mails." });
     } finally {
+      releaseJob(item);
       await browserScraper?.close();
       res.end();
     }
@@ -492,7 +518,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     // HTTP, só sites bloqueados) → navegador.
     const es = emailScraper;
     const engineScraper =
-      engine.name !== "playwright" ? new EmailScraper({ engine, engineMode: "fast" }) : null;
+      engine.name !== "playwright" ? new EmailScraper({ engine, engineMode: "fast", timeoutMs: EMAIL_TIMEOUT_MS }) : null;
     const engineConcurrency =
       parseInt(req.query.econc, 10) || parseInt(process.env.EMAIL_ENGINE_CONCURRENCY, 10) || 4;
     // Fallback com navegador (sites JS): ligado por padrão, desligável com render=0.
@@ -513,6 +539,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     let antiBan = 0;
     const sendProgress = (p, query) =>
       send("progress", { fase: p.fase, current: p.current, total: p.total, nome: p.nome, encontrados: p.encontrados, query });
+    holdJob(item);
     try {
       for (const b of item.buscas) {
         const r = await enrichSocials(
@@ -532,7 +559,6 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
         viaBusca += r.viaBusca;
         antiBan += r.antiBan;
       }
-      item.ts = Date.now();
       send("done", {
         ok,
         semRedes,
@@ -545,6 +571,7 @@ export function createServer({ scraper, gridScraper, siteTextScraper, emailScrap
     } catch (err) {
       send("error", { message: err.message || "Falha ao buscar redes sociais." });
     } finally {
+      releaseJob(item);
       await browserScraper?.close();
       res.end();
     }

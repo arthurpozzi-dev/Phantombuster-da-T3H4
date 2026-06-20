@@ -35,6 +35,30 @@ test("anti-ban tier retries ONLY sites the native fetch could not load", async (
   assert.equal(blocked.site_emails_erro, ""); // erro do fetch nativo foi limpo
 });
 
+test("anti-ban: engine LOADS a Phase-1-blocked site but finds no e-mail → semEmail, not falha", async () => {
+  const emailScraper = {
+    async scrapeContacts(url) {
+      throw new Error("HTTP 403"); // Fase 1 bloqueia (Cloudflare-ish)
+    },
+  };
+  const engineScraper = {
+    async scrapeContacts() {
+      // O engine ALCANÇA o site (não lança), mas a página não tem e-mail.
+      return { emails: [], socials: [], pagesVisited: 1 };
+    },
+  };
+  const leads = [{ nome: "Blocked", site: "https://blocked.com", site_emails: "" }];
+  const out = await enrichEmails(leads, emailScraper, undefined, { engineScraper });
+
+  const blocked = out.leads.find((l) => l.nome === "Blocked");
+  assert.equal(blocked.site_emails_erro, ""); // o site carregou: erro do fetch foi limpo
+  assert.equal(blocked.site_emails, "");
+  assert.equal(out.antiBan, 0); // nada de e-mail recuperado
+  assert.equal(out.falhas, 0); // NÃO é falha: o site é alcançável
+  assert.equal(out.semEmail, 1); // carregou, só não tinha e-mail
+  assert.equal(out.ok, 0);
+});
+
 test("pageCache fetches a shared site once across leads", async () => {
   const calls = new Map();
   const emailScraper = {

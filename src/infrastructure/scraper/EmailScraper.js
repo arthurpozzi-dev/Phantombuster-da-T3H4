@@ -97,13 +97,13 @@ export function findContactLinks(html, baseUrl) {
 export class EmailScraper {
   /**
    * @param {Object} [options]
-   * @param {number} [options.timeoutMs=10000] tempo máximo por requisição
+   * @param {number} [options.timeoutMs=20000] tempo máximo por requisição
    * @param {number} [options.maxPages=6]       máx. de páginas internas visitadas além da home
    * @param {number} [options.pageConcurrency=4] páginas de contato baixadas em paralelo por lead
    * @param {number} [options.retries=0]        re-tentativas em falhas transitórias na HOME (as
    *                                            3 variações www/apex/http já são o fallback)
    */
-  constructor({ timeoutMs = 10000, maxPages = 6, pageConcurrency = 4, retries = 0, engine, engineMode } = {}) {
+  constructor({ timeoutMs = 20000, maxPages = 6, pageConcurrency = 4, retries = 0, engine, engineMode } = {}) {
     this.timeoutMs = timeoutMs;
     this.maxPages = maxPages;
     this.pageConcurrency = pageConcurrency;

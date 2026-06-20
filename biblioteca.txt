@@ -1,0 +1,3 @@
+https://github.com/oguzcankaraman/GMapHunter - GridMode
+https://github.com/CloakHQ/cloakbrowser - Securite Mode
+https://github.com/d4vinci/Scrapling - Hard Mode

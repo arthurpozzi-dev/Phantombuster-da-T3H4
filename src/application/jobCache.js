@@ -68,7 +68,10 @@ export function createCwvCache({ ttlMs = 6 * 3600_000, now = () => Date.now() } 
     run(key, factory) {
       const k = key || "";
       const hit = resolved.get(k);
-      if (hit && now() - hit.at < ttlMs) return Promise.resolve(hit.value);
+      if (hit) {
+        if (now() - hit.at < ttlMs) return Promise.resolve(hit.value);
+        resolved.delete(k); // expirado: evicta (senão a entrada fria nunca sai e vaza memória)
+      }
       if (inflight.has(k)) return inflight.get(k);
       const p = Promise.resolve()
         .then(factory)
@@ -83,6 +86,15 @@ export function createCwvCache({ ttlMs = 6 * 3600_000, now = () => Date.now() } 
         });
       inflight.set(k, p);
       return p;
+    },
+    /**
+     * Remove todas as entradas expiradas. O `run()` só evicta a chave que é
+     * relida; domínios analisados uma vez e nunca mais ficariam para sempre —
+     * por isso o servidor chama isto periodicamente.
+     */
+    sweep() {
+      const t = now();
+      for (const [k, v] of resolved) if (t - v.at >= ttlMs) resolved.delete(k);
     },
   };
 }

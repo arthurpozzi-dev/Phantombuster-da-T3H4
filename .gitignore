@@ -1,2 +1,28 @@
 node_modules
 .chromium-libs
+
+# Segredos / variáveis de ambiente (nunca commitar)
+.env
+.env.*.local
+
+# Chaves SSH / privadas (nunca commitar)
+arthurpozzi01@gmail.com
+arthurpozzi01@gmail.com.pub
+*.pem
+id_ed25519*
+id_rsa*
+
+# Lixo do Windows/WSL
+*:Zone.Identifier
+
+# Banco / vector store local
+ruvector.db
+*.db
+
+# Config local do Claude Code
+.claude/settings.local.json
+
+# Repos externos clonados (GridMode / Security / Hard Mode — ver biblioteca.txt)
+GMapsHunter/
+Scrapling/
+cloakbrowser/

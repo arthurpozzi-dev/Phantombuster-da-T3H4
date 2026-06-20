@@ -44,9 +44,9 @@ const emailCount = (lead) => (lead.site_emails || "").split(" | ").filter(Boolea
 
 /**
  * @param {import("../domain/Lead.js").Lead[]} comSite
- * @param {{ scrapeEmails: (url:string)=>Promise<{emails:string[], pagesVisited:number}> }} emailScraper
+ * @param {{ scrapeContacts: (url:string)=>Promise<{emails:string[], socials:string[], pagesVisited:number}> }} emailScraper
  * @param {(p: { fase:"rápido"|"navegador", current:number, total:number, nome:string, encontrados:number, erro?:string }) => void} [onProgress]
- * @param {{ concurrency?: number, engineScraper?: { scrapeContacts:(url:string)=>Promise<{emails:string[],socials:string[]}> }, engineConcurrency?: number, browserScraper?: { scrapeEmails:(url:string)=>Promise<{emails:string[]}> }, browserConcurrency?: number }} [options]
+ * @param {{ concurrency?: number, engineScraper?: { scrapeContacts:(url:string)=>Promise<{emails:string[],socials:string[]}> }, engineConcurrency?: number, browserScraper?: { scrapeContacts:(url:string)=>Promise<{emails:string[],socials:string[]}> }, browserConcurrency?: number }} [options]
  * @returns {Promise<{ leads: import("../domain/Lead.js").Lead[], ok: number, semEmail: number, falhas: number, renderizados: number, antiBan: number }>}
  */
 export async function enrichEmails(comSite = [], emailScraper, onProgress, options = {}) {
@@ -114,13 +114,16 @@ export async function enrichEmails(comSite = [], emailScraper, onProgress, optio
             const antesRedes = lead.redes_sociais || "";
             const redes = mergeSocialLinks(antesRedes, socials);
             const fontes = recordSocialSources(lead.redes_fontes, antesRedes, redes, "site");
-            if (merged.length) {
-              antiBan++;
-              // Engine alcançou o site: limpa o erro do fetch nativo.
-              leads[i] = { ...lead, site_emails: merged.join(" | "), redes_sociais: redes, redes_fontes: fontes, site_emails_erro: "" };
-            } else if (redes !== antesRedes) {
-              leads[i] = { ...lead, redes_sociais: redes, redes_fontes: fontes };
-            }
+            if (merged.length) antiBan++; // placar: só conta quem rendeu e-mail
+            // O engine NÃO lançou => o site carregou: limpa o erro do fetch nativo
+            // mesmo sem e-mail (vira "sem e-mail", não "falha"). Espelha as redes.
+            leads[i] = {
+              ...lead,
+              site_emails: merged.join(" | "),
+              redes_sociais: redes,
+              redes_fontes: fontes,
+              site_emails_erro: "",
+            };
           } catch {
             /* engine também não alcançou: mantém o erro da Fase 1 (tenta navegador) */
           }

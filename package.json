@@ -20,6 +20,7 @@
     "jszip": "^3.10.1",
     "lighthouse": "^12.8.2",
     "playwright": "^1.61.0",
-    "playwright-core": "^1.61.0"
+    "playwright-core": "^1.61.0",
+    "skillfish": "^1.0.38"
   }
 }

@@ -37,7 +37,11 @@ const engines = createEngineRegistry();
 const scraper = new GoogleMapsScraper({ headless: true });
 const gridScraper = new GoogleMapsGridScraper();
 const siteTextScraper = new SiteTextScraper();
-const emailScraper = new EmailScraper();
+const emailScraper = new EmailScraper({
+  // Timeout por requisição HTTP. Default 20s (era 10s): muitos sites lentos
+  // estouravam 10s e caíam como falha. Configurável via EMAIL_TIMEOUT_MS.
+  timeoutMs: parseInt(process.env.EMAIL_TIMEOUT_MS, 10) || 20000,
+});
 // Fábrica: 1 navegador por requisição de e-mails (evita que uma req feche o da outra).
 // Recebe o engine escolhido (CloakBrowser anti-ban, etc.); sem engine, usa Playwright.
 const makeBrowserEmailScraper = (engine) => new BrowserEmailScraper({ headless: true, engine });
