@@ -19,7 +19,7 @@
  * nas camadas de domínio/aplicação — este arquivo não conhece regras de negócio.
  *
  * Os índices do JSON do Maps (info[11]=nome, info[10]=ftid, info[4][7]=nota,
- * info[4][8]=avaliações, info[178][0][0]=telefone, info[7]=site, info[2]=endereço,
+ * info[37][1]=avaliações, info[178][0][0]=telefone, info[7]=site, info[2]=endereço,
  * info[13]=categorias) podem mudar se o Google alterar o formato.
  */
 import { runPool } from "../../application/concurrentPool.js";
@@ -140,9 +140,12 @@ export function mapBusiness(info) {
   const ftid = safeGet(info, [10]);
   const cats = safeGet(info, [13]);
   const rating = safeGet(info, [4, 7]);
-  // Contagem de avaliações fica ADJACENTE à nota: info[4][8] (não info[37][1] —
-  // esse era o índice errado, que trazia outro campo e quebrava a quantidade).
-  const reviews = safeGet(info, [4, 8]);
+  // Contagem de avaliações (o "(N)" ao lado das estrelas): o Google passou a
+  // entregá-la em info[37][1]. O antigo info[4][8] hoje vem VAZIO — info[4] só
+  // traz a nota em [4][7] — então fica só como fallback defensivo se o formato
+  // variar. Ler de info[4][8] esvaziava avaliacoes e o filtro padrão (mín. 5)
+  // descartava 100% dos leads.
+  const reviews = safeGet(info, [37, 1]) ?? safeGet(info, [4, 8]);
   const phone = safeGet(info, [178, 0, 0]);
   const addrParts = safeGet(info, [2]);
 

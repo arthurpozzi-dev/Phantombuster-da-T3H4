@@ -20,14 +20,16 @@ import {
 function makeBizNode({ name, ftid, cats = ["Restaurante"], rating = 4.5, reviews = 100, phone = "(16) 3333-3333", addr = ["R. X, 1 - Centro", "São Carlos - SP", "13560-000"], site } = {}) {
   const node = new Array(260).fill(null);
   node[2] = addr;
-  // nota e contagem de avaliações são adjacentes: info[4][7]=nota, info[4][8]=avaliações.
-  node[4] = [null, null, null, null, null, null, null, rating, reviews];
+  // A nota fica em info[4][7]. A contagem de avaliações ("(N)" ao lado das
+  // estrelas) fica em info[37][1] — o Google esvaziou o antigo info[4][8], que
+  // deixamos preenchido com uma ISCA para garantir que não voltamos a lê-lo.
+  node[4] = [null, null, null, null, null, null, null, rating, 999999];
   node[7] = site ? [`/url?q=${encodeURIComponent(site)}&opi=1`, site.replace(/^https?:\/\//, "").replace(/\/$/, "")] : null;
   node[9] = [null, null, -22.0, -47.9];
   node[10] = ftid;
   node[11] = name;
   node[13] = cats;
-  node[37] = [null, 999999]; // isca: índice ANTIGO (errado) — garante que não voltamos a lê-lo
+  node[37] = [null, reviews]; // contagem de avaliações REAL (formato atual do Maps)
   node[178] = [[phone]];
   return node;
 }
