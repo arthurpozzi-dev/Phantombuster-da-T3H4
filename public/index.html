@@ -147,45 +147,6 @@ https://www.google.com/maps/search/petshops+em+campinas"></textarea>
             </div>
           </div>
 
-          <div style="margin-top: var(--s4);">
-            <label>Fonte da análise de laboratório (Lighthouse)<span class="help tip-start" tabindex="0" role="note" aria-label="Onde a análise de laboratório (Lighthouse) é executada. O CrUX (dado de campo real) continua sempre vindo do Google. Self-Hosted do Sistema usa a instância configurada no servidor; Outro servidor usa a URL que você informar." data-tip="Onde o laboratório (Lighthouse) roda. O CrUX continua sempre do Google. 'Self-Hosted do Sistema' usa a instância do servidor; 'Outro servidor' usa a URL que você informar."></span></label>
-            <div class="toggle-grid" role="radiogroup" aria-label="Fonte da análise de laboratório" style="margin-top: var(--s3); grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));">
-              <label class="toggle-card">
-                <input type="radio" name="lhSource" value="google" checked />
-                <span>
-                  <span class="t-title">PageSpeed do Google</span>
-                  <span class="t-desc">Padrão. Usa a API pública do Google.</span>
-                </span>
-              </label>
-              <label class="toggle-card">
-                <input type="radio" name="lhSource" value="system" />
-                <span>
-                  <span class="t-title">Self-Hosted do Sistema</span>
-                  <span class="t-desc">Usa a frota Lighthouse do servidor (LIGHTHOUSE_SERVER_URL).</span>
-                  <span class="t-desc" style="color: #b45309; font-weight: 600;">⚠ Só usar caso a API esteja off — roda na CPU local, é mais lento.</span>
-                </span>
-              </label>
-              <label class="toggle-card">
-                <input type="radio" name="lhSource" value="custom" />
-                <span>
-                  <span class="t-title">Outro servidor</span>
-                  <span class="t-desc">Informe abaixo a URL de uma instância sua.</span>
-                </span>
-              </label>
-            </div>
-            <div id="lighthouseUrlWrap" class="row" style="margin-top: var(--s3); display: none;">
-              <div style="flex: 1 1 100%;">
-                <input id="lighthouseUrl" type="url" placeholder="https://lighthouse.seudominio.com" autocomplete="off" />
-              </div>
-            </div>
-            <div id="lhInstancesWrap" class="row" style="margin-top: var(--s3); display: none;">
-              <div style="flex: 0 0 220px;">
-                <label for="lhInstances">Instâncias (workers em paralelo)<span class="help tip-start" tabindex="0" role="note" aria-label="Quantos workers Lighthouse o app sobe para esta análise. Mais instâncias = mais sites medidos ao mesmo tempo, até o limite de núcleos da máquina. Sobem sob demanda na primeira análise." data-tip="Quantos workers Lighthouse o app sobe. Mais = mais paralelismo, até o limite de núcleos. Sobem na primeira análise."></span></label>
-                <input id="lhInstances" type="number" min="1" max="8" value="2" />
-              </div>
-            </div>
-          </div>
-
           <div class="toggle-grid" style="margin-top: var(--s4);">
             <label class="toggle-card">
               <input id="deepCwv" type="checkbox" />
