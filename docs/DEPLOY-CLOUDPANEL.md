@@ -64,10 +64,10 @@ Acesse como o usuário do site: `sudo su - SITE_USER` (ou SSH direto com esse us
 ```bash
 cd ~/htdocs/<dominio>          # APP_DIR
 
-# Clonar o repositório (escolha a branch que quer publicar; provavelmente feat/ui-redesign)
+# Clonar o repositório (branch main = versão consolidada).
 # Repo privado: gere um deploy key novo nesta VPS e cadastre no GitHub (Deploy keys),
 # ou use um Personal Access Token via HTTPS.
-git clone -b feat/ui-redesign https://github.com/arthurpozzi-dev/scraping-leads-t3h4.git .
+git clone https://github.com/arthurpozzi-dev/scraping-leads-t3h4.git .
 
 # Instalar deps (o postinstall baixa o Chromium do Playwright automaticamente)
 npm ci
